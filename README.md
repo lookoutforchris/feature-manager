@@ -8,7 +8,7 @@ The functionality is limited at this point  (see [Usage](#usage)) and performanc
 
 ## Installation
 
-Download the add-in from the [Releases](https://github.com/thomasa88/VerticalTimeline/releases) page.
+Download the add-in from the [Releases](https://github.com/original-author/VerticalTimeline/releases) page.
 
 Unpack it into `API\AddIns` (see [How to install an add-in or script in Fusion 360](https://knowledge.autodesk.com/support/fusion-360/troubleshooting/caas/sfdcarticles/sfdcarticles/How-to-install-an-ADD-IN-and-Script-in-Fusion-360.html)).
 
@@ -52,3 +52,9 @@ The add-in can be temporarily disabled using the *Scripts and Add-ins* dialog. P
 * v 0.2.0
   * Fix selection of features inside components/occurrences.
   * Allow selection of rolled back and suppressed features.
+
+## License
+
+This fork is distributed under the MIT License. The original VerticalTimeline
+files were made available under `GPL-3.0-or-later OR MIT`; this project elects
+the MIT option and retains the required upstream copyright notices.

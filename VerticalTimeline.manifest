@@ -2,7 +2,7 @@
 	"autodeskProduct":	"Fusion360",
 	"type":	"addin",
 	"id":	"deb13d13-5990-47c2-af83-91b9c0c10986",
-	"author":	"Thomas Axelsson",
+	"author":	"Skyrocket Research",
 	"description":	{
 		"":	"Provides a vertical timeline."
 	},

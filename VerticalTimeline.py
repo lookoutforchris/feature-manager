@@ -1,4 +1,3 @@
-#Author-Thomas Axelsson
 #Description-Provides a vertical timeline.
 
 # This file is part of VerticalTimeline, a Fusion 360 add-in that
@@ -6,8 +5,8 @@
 #
 # Copyright (C) 2020  Thomas Axelsson
 #
-# This work is dual-licensed under GPL 3.0 (or any later version) and MIT.
-# You can choose between one of them if you use this work.
+# This fork elects the MIT license from the original dual-license grant.
+# SPDX-License-Identifier: MIT
 
 # Put add-in folder in %appdata%\Autodesk\Autodesk Fusion 360\API\AddIns
 
@@ -24,38 +23,65 @@ import threading
 
 NAME = 'Vertical Timeline'
 FILE_DIR = os.path.dirname(os.path.realpath(__file__))
+PALETTE_ID = 'featureManager_verticalTimelinePalette'
+COMMAND_ID = 'featureManager_showVerticalTimeline'
+INITIAL_PALETTE_REFRESH_EVENT = 'featureManager_verticalTimeline_initialRefresh'
+PALETTE_DEFAULT_WIDTH = 435
+PALETTE_DEFAULT_HEIGHT = 500
+PALETTE_MIN_WIDTH = 435
+PALETTE_MIN_HEIGHT = 300
 
 # Import relative path to avoid namespace pollution
-from .thomasa88lib import utils
-from .thomasa88lib import events
-from .thomasa88lib import timeline
-from .thomasa88lib import settings
-from .thomasa88lib import manifest
-from .thomasa88lib import error
+from . import featuremanagerlib
+from .featuremanagerlib import utils
+from .featuremanagerlib import events
+from .featuremanagerlib import timeline
+from .featuremanagerlib import settings
+from .featuremanagerlib import manifest
+from .featuremanagerlib import error
 
 # Force modules to be fresh during development
 import importlib
-importlib.reload(thomasa88lib)
-importlib.reload(thomasa88lib.events)
-importlib.reload(thomasa88lib.timeline)
-importlib.reload(thomasa88lib.settings)
-importlib.reload(thomasa88lib.manifest)
-importlib.reload(thomasa88lib.error)
+importlib.reload(featuremanagerlib)
+importlib.reload(featuremanagerlib.events)
+importlib.reload(featuremanagerlib.timeline)
+importlib.reload(featuremanagerlib.settings)
+importlib.reload(featuremanagerlib.manifest)
+importlib.reload(featuremanagerlib.error)
 
 ui = None
 app = None
-error_catcher = thomasa88lib.error.ErrorCatcher(msgbox_in_debug=False)
-events_manager = thomasa88lib.events.EventsManager(error_catcher)
-manifest = thomasa88lib.manifest.read()
+error_catcher = featuremanagerlib.error.ErrorCatcher(msgbox_in_debug=False)
+events_manager = featuremanagerlib.events.EventsManager(error_catcher)
+manifest = featuremanagerlib.manifest.read()
 
 html_ready = False
+DEBUG_LOGGING = False
+ALLOWED_FEATURE_COMMANDS = {
+    'CreateSelectionGroupCmd',
+    'FusionDeleteCommand',
+}
 
 timeline_item_count = 0
 timeline_marker_position = -1
 
-settings = thomasa88lib.settings.SettingsManager(
+settings = featuremanagerlib.settings.SettingsManager(
     { 'enabled': False }
 )
+
+def debug_log(message):
+    if DEBUG_LOGGING:
+        print(f'{NAME}: {message}')
+
+def get_active_workspace_id():
+    try:
+        active_workspace = ui.activeWorkspace
+        return active_workspace.id if active_workspace else ''
+    except RuntimeError as err:
+        # Fusion can temporarily have no readable active workspace during
+        # document/environment transitions.
+        debug_log(f'activeWorkspace unavailable: {err}')
+        return ''
 
 def get_enabled():
     return settings['enabled']
@@ -103,14 +129,14 @@ FEATURE_RESOURCE_MAP = {
     'FormFeature': ('Fusion/UI/FusionUI/Resources/TSpline/TSplineBaseFeatureCreation', 'TSplineBaseFeatureActivate'),
     'LoftFeature': lambda i: ('Fusion/UI/FusionUI/Resources/solid/loft', 'FusionLoftEditCommand') if i.entity.isSolid else ('Fusion/UI/FusionUI/Resources/surface/loft', 'FusionSurfaceLoftEditCommand'),
     'ExtrudeFeature': lambda i: ('Fusion/UI/FusionUI/Resources/solid/extrude', 'FusionExtrudeEditCommand') if i.entity.isSolid else ('Fusion/UI/FusionUI/Resources/surface/extrude', 'FusionSurfaceExtrudeEditCommand'),
-    'Occurrence': lambda i: OCCURRENCE_RESOURCE_MAP[thomasa88lib.timeline.get_occurrence_type(i)],
+    'Occurrence': lambda i: OCCURRENCE_RESOURCE_MAP[featuremanagerlib.timeline.get_occurrence_type(i)],
     'BoundaryFillFeature': ('Fusion/UI/FusionUI/Resources/surface/surface_sculpt', 'FusionSculptEditCommand'),
     'SurfaceDeleteFaceFeature': ('Fusion/UI/FusionUI/Resources/modify/surface_delete', 'FusionDcSurfaceDeleteFaceEditCommand'),
     'RevolveFeature': lambda i: ('Fusion/UI/FusionUI/Resources/solid/revolve', 'FusionRevolveEditCommand') if i.entity.isSolid else ('Fusion/UI/FusionUI/Resources/surface/revolve', 'FusionSurfaceRevolveEditCommand'),
     'SweepFeature': lambda i: ('Fusion/UI/FusionUI/Resources/solid/sweep', 'FusionSweepEditCommand') if i.entity.isSolid else ('Fusion/UI/FusionUI/Resources/surface/sweep', 'FusionSurfaceSweepEditCommand'),
     'RibFeature': ('Fusion/UI/FusionUI/Resources/solid/rib', 'FusionDcRibEditCommand'),
     'WebFeature': ('Fusion/UI/FusionUI/Resources/solid/web', 'FusionDcWebEditCommand'),
-    'Thomasa88Feature': ('Vertical/Timeline', 'FeatureMap'),
+    'FeatureManagerFeature': ('Vertical/Timeline', 'FeatureMap'),
     'BoxFeature': ('Fusion/UI/FusionUI/Resources/solid/primitive_box', 'BoxPrimitiveEditCommand'),
     'CylinderFeature': ('Fusion/UI/FusionUI/Resources/solid/primitive_cylinder', 'CylinderPrimitiveEditCommand'),
     'SphereFeature': ('Fusion/UI/FusionUI/Resources/solid/primitive_sphere', 'SpherePrimitiveEditCommand'),
@@ -159,7 +185,7 @@ FEATURE_RESOURCE_MAP = {
     'Snapshot': ('Fusion/UI/FusionUI/Resources/Assembly/Snapshot', 'SnapshotActivate'),
 
     # Planes
-    'ConstructionPlane': lambda i: PLANE_RESOURCE_MAP.get(thomasa88lib.utils.short_class(i.entity.definition)),
+    'ConstructionPlane': lambda i: PLANE_RESOURCE_MAP.get(featuremanagerlib.utils.short_class(i.entity.definition)),
     
     # Not allowed to access entity for these (API mismatch?)
     # Bug: https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-cannot-access-entity-of-quot-move-quot-feature/m-p/9651921
@@ -172,8 +198,8 @@ FEATURE_RESOURCE_MAP = {
     # insert derive feature: 'Fusion/UI/FusionUI/Resources/Derive/CloneWM',
 }
 
-def get_feature_image(obj):
-    match = get_feature_res(obj)
+def get_feature_image(obj, entity=None):
+    match = get_feature_res(obj, entity)
 
     if not match or not match[0]:
         # Image not mapped
@@ -191,16 +217,30 @@ def get_feature_edit_command_id(obj):
     else:
         return match[1]
 
-def get_feature_res(obj):
-    entity = obj.entity
-    fusionType = thomasa88lib.utils.short_class(entity)
+def get_feature_res(obj, entity=None):
+    if entity is None:
+        entity = get_timeline_entity(obj)
+    if entity is None:
+        return None
+    fusionType = featuremanagerlib.utils.short_class(entity)
     match = FEATURE_RESOURCE_MAP.get(fusionType)
     if callable(match):
-        match = match(obj)
+        try:
+            match = match(obj)
+        except RuntimeError:
+            match = None
     return match
 
 def get_image_path(subpath):
-    path = f'{thomasa88lib.utils.get_fusion_deploy_folder()}/{subpath}/16x16.png'
+    path = f'{featuremanagerlib.utils.get_fusion_deploy_folder()}/{subpath}/16x16.png'
+    if os.path.exists(path):
+        return path
+    else:
+        print(f'File does not exist: {path}')
+        return None
+
+def get_fusion_resource_file(subpath):
+    path = f'{featuremanagerlib.utils.get_fusion_deploy_folder()}/{subpath}'
     if os.path.exists(path):
         return path
     else:
@@ -223,21 +263,23 @@ def find_commands_by_resource_folder(folder):
 # ui.commandDefinitions.itemById('').resourceFolder
 # design.rootComponent.allOccurrences[0].component.sketches
 
-def invalidate(send=True, clear=False):
+def invalidate(send=True, clear=False, force=False):
     global timeline_item_count
     global timeline_marker_position
     global html_ready
 
-    palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
+    palette = ui.palettes.itemById('featureManager_verticalTimelinePalette')
 
-    if not palette or not html_ready:
+    if not palette or (not html_ready and not force):
         return
+
+    debug_log(f'invalidate send={send} clear={clear} force={force}')
 
     message = ""
     features = []
     max_parents = 0
     if not clear:
-        timeline_status, timeline = thomasa88lib.timeline.get_timeline()
+        timeline_status, timeline = featuremanagerlib.timeline.get_timeline()
         if timeline_status == TIMELINE_STATUS_OK:
             timeline_item_count = timeline.count
             timeline_marker_position = timeline.markerPosition
@@ -257,6 +299,8 @@ def invalidate(send=True, clear=False):
          'features': features,
          'max-parents': max_parents,
          'message': message,
+         'marker-position': timeline_marker_position,
+         'timeline-count': timeline_item_count,
     }
 
     if not send:
@@ -265,19 +309,22 @@ def invalidate(send=True, clear=False):
         html_command = {'action': 'setTimeline', 'data': data}
         return html_command
     else:
+        debug_log(f'sending timeline update features={len(features)} message="{message}"')
         palette.sendInfoToHTML('setTimeline', json.dumps(data))
 
 class TimelineObjectNode:
-    def __init__(self, obj, id):
+    def __init__(self, obj, id, marker_position=None):
         self.obj = obj
         self.id = id
         self.children = []
+        self.marker_position = marker_position
+        self.marker_after_position = marker_position + 1 if marker_position is not None else None
 
 timeline_cache_tree = None
 timeline_cache_map = None
 def get_features(timeline):
     global timeline_cache_tree, timeline_cache_map
-    flat_timeline = thomasa88lib.timeline.flatten_timeline(timeline)
+    flat_timeline = featuremanagerlib.timeline.flatten_timeline(timeline)
     timeline_cache_tree, timeline_cache_map = build_timeline_tree(flat_timeline)
 
     component_parent_map = get_component_parent_map()
@@ -295,29 +342,32 @@ def get_features_from_node(timeline_tree_node, component_parent_map):
             'name': obj.name,
             'suppressed': obj.isSuppressed,
             'rolledBack': obj.isRolledBack,
+            'marker-position': child_node.marker_position,
+            'marker-after-position': child_node.marker_after_position,
             }
 
         # Might there be empty groups?
         if child_node.children:
             # Group
             feature['type'] = 'GROUP'
-            feature['image'] = get_image_path('Fusion/UI/FusionUI/Resources/Timeline/GroupFeature')
+            feature['image'] = get_fusion_resource_file('Neutron/UI/Base/Resources/Folder/folder.png')
+            feature['expanded-image'] = get_fusion_resource_file('Neutron/UI/Base/Resources/Palette/TipsAndTricks/10x10-ArrowDown.png')
+            feature['collapsed-image'] = get_fusion_resource_file('Neutron/UI/Base/Resources/Palette/TipsAndTricks/10x10-ArrowRight.png')
+            feature['collapsed'] = obj.isCollapsed
             feature['children'], group_max_parents = get_features_from_node(child_node,
                                                                             component_parent_map)
             if group_max_parents > max_parents:
                 max_parents = group_max_parents
         else:
             # Not group
-            try:
-                entity = obj.entity
-            except RuntimeError as e:
-                entity = None
+            entity = get_timeline_entity(obj)
             
             if entity:
-                feature['type'] = thomasa88lib.utils.short_class(obj.entity)
-                feature['image'] = get_feature_image(obj)
+                feature['type'] = featuremanagerlib.utils.short_class(entity)
+                feature['image'] = get_feature_image(obj, entity)
                 parents = get_feature_parent_path(component_parent_map,
-                                                  obj)
+                                                  obj,
+                                                  entity)
                 feature['parent-components'] = parents
                 if len(parents) > max_parents:
                     max_parents = len(parents)
@@ -336,21 +386,24 @@ def get_features_from_node(timeline_tree_node, component_parent_map):
                 # Fusion uses a space separator for the timeline object name, but sometimes the first part is empty.
                 # Strip the whitespace to make the list cleaner.
                 feature['name'] = feature['name'].lstrip()
-                if thomasa88lib.timeline.get_occurrence_type(obj) != OCCURRENCE_BODIES_COMP:
+                if featuremanagerlib.timeline.get_occurrence_type(obj) != OCCURRENCE_BODIES_COMP:
                     # Name is a read-only instance variant of the component's name,
                     # with a prefix on it.
                     # Let the user modify the component's name instead
-                    feature['edit-name'] = obj.entity.component.name
+                    feature['edit-name'] = entity.component.name
 
         features.append(feature)
 
     return (features, max_parents)
 
-def get_feature_parent_path(component_parent_map, obj):
+def get_feature_parent_path(component_parent_map, obj, feature=None):
     design = app.activeProduct
 
-    feature = obj.entity
-    feature_type = thomasa88lib.utils.short_class(feature)
+    if feature is None:
+        feature = get_timeline_entity(obj)
+    if feature is None:
+        return []
+    feature_type = featuremanagerlib.utils.short_class(feature)
     if feature_type == 'Occurrence':
         if obj.isRolledBack or obj.isSuppressed:
             # No parent component will be available
@@ -396,9 +449,9 @@ def build_timeline_tree(flat_timeline):
         next_id += 1
         return node_id
 
-    def new_node(obj):
+    def new_node(obj, marker_position=None):
         node_id = next_node_id()
-        node = TimelineObjectNode(obj, node_id)
+        node = TimelineObjectNode(obj, node_id, marker_position)
         id_map[node_id] = node
         return node
 
@@ -417,14 +470,35 @@ def build_timeline_tree(flat_timeline):
         parent_node.children.append(group_node)
         return group_node
     
-    for obj in flat_timeline:
-        node = new_node(obj)
+    for marker_position, obj in enumerate(flat_timeline):
+        node = new_node(obj, marker_position)
         parent_obj = obj.parentGroup
         if parent_obj != in_node.obj:
             in_node = get_group_node(parent_obj)
         in_node.children.append(node)
 
+    set_group_marker_positions(top_node)
     return top_node, id_map
+
+def set_group_marker_positions(node):
+    for child in node.children:
+        set_group_marker_positions(child)
+
+    if not node.children:
+        return
+
+    child_marker_positions = [
+        child.marker_position for child in node.children
+        if child.marker_position is not None
+    ]
+    child_marker_after_positions = [
+        child.marker_after_position for child in node.children
+        if child.marker_after_position is not None
+    ]
+    if child_marker_positions:
+        node.marker_position = min(child_marker_positions)
+    if child_marker_after_positions:
+        node.marker_after_position = max(child_marker_after_positions)
 
 def get_component_parent_map():
     design = app.activeProduct
@@ -453,7 +527,7 @@ def check_timeline():
     global timeline_item_count
     global timeline_marker_position
     global html_ready
-    timeline_status, timeline = thomasa88lib.timeline.get_timeline()
+    timeline_status, timeline = featuremanagerlib.timeline.get_timeline()
     if timeline_status == TIMELINE_STATUS_OK:
         if (timeline.count != timeline_item_count or
             timeline.markerPosition != timeline_marker_position):
@@ -470,11 +544,11 @@ def run(context):
         ui = app.userInterface
 
         # Add a command that displays the palette
-        toggle_palette_cmd_def = ui.commandDefinitions.itemById('thomasa88_showVerticalTimeline')
+        toggle_palette_cmd_def = ui.commandDefinitions.itemById('featureManager_showVerticalTimeline')
 
         if not toggle_palette_cmd_def:
             toggle_palette_cmd_def = ui.commandDefinitions.addButtonDefinition(
-                'thomasa88_showVerticalTimeline',
+                'featureManager_showVerticalTimeline',
                 'Toggle Vertical Timeline',
                 'Vertical Timeline\n\n' +
                 'A vertical timeline, that shows feature names. Timeline functionality is limited.',
@@ -487,7 +561,7 @@ def run(context):
         # Add the command to the View menu
         view_drop_down = get_view_drop_down()
         
-        cntrl = view_drop_down.controls.itemById('thomasa88_showVerticalTimeline')
+        cntrl = view_drop_down.controls.itemById('featureManager_showVerticalTimeline')
         if not cntrl:
             view_drop_down.controls.addCommand(toggle_palette_cmd_def,
                                                'SeparatorAfter_DashboardModeCloseCommand', False) 
@@ -518,7 +592,12 @@ def run(context):
                     adsk.core.WorkspaceEventHandler,
                     workspace_activated_handler)
 
-        print("Running")
+        initial_refresh_event = events_manager.register_event(INITIAL_PALETTE_REFRESH_EVENT)
+        events_manager.add_handler(initial_refresh_event,
+                    adsk.core.CustomEventHandler,
+                    initial_palette_refresh_handler)
+
+        debug_log("Running")
 
         # Show palette when user starts the add-in manually
         if get_enabled() and app.isStartupComplete:
@@ -526,29 +605,30 @@ def run(context):
 
 def stop(context):
     with error_catcher:
-        print('Stopping')
+        debug_log('Stopping')
 
         events_manager.clean_up()
 
         # Delete the palette created by this add-in.
-        palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
+        palette = ui.palettes.itemById('featureManager_verticalTimelinePalette')
         if palette:
             palette.deleteMe()
 
         # Delete controls and associated command definitions created by this add-ins
         view_drop_down = get_view_drop_down()
-        cntrl = view_drop_down.controls.itemById('thomasa88_showVerticalTimeline')
+        cntrl = view_drop_down.controls.itemById('featureManager_showVerticalTimeline')
         if cntrl:
             cntrl.deleteMe()
-        cmdDef = ui.commandDefinitions.itemById('thomasa88_showVerticalTimeline')
+        cmdDef = ui.commandDefinitions.itemById('featureManager_showVerticalTimeline')
         if cmdDef:
             cmdDef.deleteMe()
 
 def toggle_palette_command_execute_handler(args):
     enable = not get_enabled()
     set_enabled(enable)
+    debug_log(f'toggle palette enable={enable}')
     if enable:
-        if ui.activeWorkspace.id == 'FusionSolidEnvironment':
+        if get_active_workspace_id() == 'FusionSolidEnvironment':
             show_palette()
         else:
             ui.messageBox('Vertical Timeline cannot be shown in this workspace. ' +
@@ -559,13 +639,15 @@ def toggle_palette_command_execute_handler(args):
 def show_palette():
     global html_ready
 
-    palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
+    palette = ui.palettes.itemById(PALETTE_ID)
     if not palette:
         html_ready = False
+        debug_log('creating palette')
 
-        palette = ui.palettes.add('thomasa88_verticalTimelinePalette', f'Vertical Timeline v{manifest["version"]}',
+        palette = ui.palettes.add('featureManager_verticalTimelinePalette', f'Vertical Timeline v{manifest["version"]}',
                                     'palette.html',
-                                    True, True, True, 250, 500, False)
+                                    True, False, True, PALETTE_DEFAULT_WIDTH, PALETTE_DEFAULT_HEIGHT, False)
+        palette.setMinimumSize(PALETTE_MIN_WIDTH, PALETTE_MIN_HEIGHT)
         palette.dockingState = adsk.core.PaletteDockingStates.PaletteDockStateLeft
 
         events_manager.add_handler(palette.incomingFromHTML,
@@ -574,16 +656,184 @@ def show_palette():
 
         events_manager.add_handler(palette.closed,
                                    adsk.core.UserInterfaceGeneralEventHandler,
-                                   palette_closed_handler)        
+                                   palette_closed_handler)
+        schedule_initial_palette_refresh()
     else:
+        debug_log('showing existing palette')
         invalidate()
         if not palette.isVisible:
             palette.isVisible = True
 
 def hide_palette():
-    palette = ui.palettes.itemById('thomasa88_verticalTimelinePalette')
+    palette = ui.palettes.itemById('featureManager_verticalTimelinePalette')
     if palette:
+        debug_log('hiding palette')
         palette.isVisible = False
+
+def get_associated_component(entity):
+    if isinstance(entity, adsk.fusion.Occurrence):
+        return entity.sourceComponent
+    elif isinstance(entity, adsk.fusion.ConstructionPlane):
+        return entity.parent
+    else:
+        return entity.parentComponent
+
+def add_body_selection_fallback(selection, entity, design, associated_component):
+    if not hasattr(entity, 'bodies'):
+        return
+
+    if associated_component == design.rootComponent:
+        for body in entity.bodies:
+            selection.add(body)
+    else:
+        in_occurrences = design.rootComponent.allOccurrencesByComponent(associated_component)
+        for body in entity.bodies:
+            for occurrence in in_occurrences:
+                selection.add(body.createForAssemblyContext(occurrence))
+
+def build_selection(entity, design, use_body_fallback=False):
+    selection = adsk.core.ObjectCollection.create()
+    associated_component = get_associated_component(entity)
+
+    if use_body_fallback:
+        add_body_selection_fallback(selection, entity, design, associated_component)
+        return selection
+
+    if associated_component == design.rootComponent:
+        # There are no occurrences of root. Just a single instance: root.
+        selection.add(entity)
+    else:
+        in_occurrences = design.rootComponent.allOccurrencesByComponent(associated_component)
+        if hasattr(entity, 'createForAssemblyContext'):
+            for occurrence in in_occurrences:
+                selection.add(entity.createForAssemblyContext(occurrence))
+        else:
+            add_body_selection_fallback(selection, entity, design, associated_component)
+
+    return selection
+
+def select_timeline_entity(entity, design):
+    selection = build_selection(entity, design)
+    try:
+        ui.activeSelections.all = selection
+        return True, None
+    except Exception as first_error:
+        fallback_selection = build_selection(entity, design, use_body_fallback=True)
+        if fallback_selection.count == 0:
+            return False, first_error
+
+    try:
+        ui.activeSelections.all = fallback_selection
+        return True, None
+    except Exception as fallback_error:
+        return False, fallback_error
+
+def build_selection_for_timeline_ids(feature_ids, design, use_body_fallback=False):
+    selection = adsk.core.ObjectCollection.create()
+    skipped = 0
+    for feature_id in feature_ids:
+        node = timeline_cache_map.get(int(feature_id))
+        if not node:
+            skipped += 1
+            continue
+        entity = get_timeline_entity(node.obj)
+        if not entity:
+            skipped += 1
+            continue
+        entity_selection = build_selection(entity, design, use_body_fallback=use_body_fallback)
+        for i in range(entity_selection.count):
+            selection.add(entity_selection.item(i))
+    return selection, skipped
+
+def select_timeline_entities(feature_ids, design):
+    selection, skipped = build_selection_for_timeline_ids(feature_ids, design)
+    if selection.count == 0:
+        return False, 'No selectable entities found'
+    try:
+        ui.activeSelections.all = selection
+        return True, None
+    except Exception as first_error:
+        fallback_selection, fallback_skipped = build_selection_for_timeline_ids(
+            feature_ids, design, use_body_fallback=True)
+        if fallback_selection.count == 0:
+            return False, first_error
+
+    try:
+        ui.activeSelections.all = fallback_selection
+        return True, None
+    except Exception as fallback_error:
+        return False, fallback_error
+
+def get_timeline_object_index(obj):
+    try:
+        return obj.index
+    except Exception:
+        return None
+
+def timeline_object_is_at_reorder_target(obj, before_index, timeline):
+    current_index = get_timeline_object_index(obj)
+    if current_index is None:
+        return False
+    if before_index == -1:
+        return current_index == timeline.count - 1
+    return current_index == before_index or current_index == before_index - 1
+
+def reorder_timeline_object_to_end(obj, timeline):
+    current_index = get_timeline_object_index(obj)
+    if current_index is None:
+        return False, 'Could not read timeline item index.'
+    if current_index >= timeline.count - 1:
+        return True, None
+
+    followers = [timeline.item(i) for i in range(current_index + 1, timeline.count)]
+    for follower in followers:
+        before_index = get_timeline_object_index(obj)
+        if before_index is None:
+            return False, 'Could not read updated timeline item index.'
+        try:
+            if not follower.canReorder(before_index):
+                return False, f'Fusion cannot move "{follower.name}" before "{obj.name}".'
+            if not follower.reorder(before_index):
+                return False, f'Fusion did not move "{follower.name}" before "{obj.name}".'
+        except Exception as reorder_error:
+            return False, str(reorder_error)
+
+    return timeline_object_is_at_reorder_target(obj, timeline.count, timeline), None
+
+def get_timeline_entity(obj):
+    if obj.isGroup:
+        return None
+    try:
+        return obj.entity
+    except RuntimeError as err:
+        debug_log(f'entity unavailable for timeline object "{obj.name}": {err}')
+        return None
+
+def schedule_initial_palette_refresh():
+    schedule_palette_refresh([0.5, 1.5, 3.0])
+
+def schedule_palette_refresh(delays):
+    for delay_seconds in delays:
+        threading.Timer(delay_seconds, app.fireCustomEvent,
+                        args=[INITIAL_PALETTE_REFRESH_EVENT]).start()
+
+def initial_palette_refresh_handler(args):
+    global html_ready
+    palette = ui.palettes.itemById('featureManager_verticalTimelinePalette')
+    if not palette:
+        return
+
+    html_ready = True
+    invalidate(force=True)
+
+def update_feature_by_id(features, feature_id, values):
+    for feature in features:
+        if feature.get('id') == feature_id:
+            feature.update(values)
+            return True
+        if update_feature_by_id(feature.get('children', []), feature_id, values):
+            return True
+    return False
 
 # Event handler for the commandCreated event.
 def toggle_palette_command_created_handler(args):
@@ -594,6 +844,7 @@ def toggle_palette_command_created_handler(args):
 
 # Event handler for the palette close event.
 def palette_closed_handler(args):
+    debug_log('palette closed')
     set_enabled(False)
 
 # Event handler for the palette HTML event.                
@@ -603,8 +854,9 @@ def palette_incoming_from_html_handler(args):
     action = htmlArgs.action
     data = json.loads(htmlArgs.data)
     html_commands = []
+    debug_log(f'HTML event action={action}')
     if action == 'ready':
-        print('HTML ready')
+        debug_log('HTML ready')
         html_ready = True
 
         # Cannot do sendInfoToHTML inside the event handler. We either have to use htmlArgs.returnData or
@@ -615,15 +867,11 @@ def palette_incoming_from_html_handler(args):
         obj = node.obj
         visible_name = None
         if data['value'] != '':
-            try:
-                entity = obj.entity
-            except RuntimeError:
-                # Move and Align does not allow us to access their entity attribute
-                entity = None
+            entity = get_timeline_entity(obj)
             if (not obj.isGroup
                 and entity
                 and entity.classType() == 'adsk::fusion::Occurrence'
-                and thomasa88lib.timeline.get_occurrence_type(obj) != OCCURRENCE_BODIES_COMP):
+                and featuremanagerlib.timeline.get_occurrence_type(obj) != OCCURRENCE_BODIES_COMP):
                 # Bonus of not doing a Command transaction: Undo history actually says from and to name.
                 entity.component.name = data['value']
                 # The shown name will have changed. Invalidate.
@@ -632,59 +880,75 @@ def palette_incoming_from_html_handler(args):
                 obj.name = data['value']
             visible_name = obj.name.lstrip()
         html_commands.append(visible_name)
-    elif action == 'selectFeature' or action == 'editFeature':
-        node = timeline_cache_map[data['id']]
-        obj = node.obj
+    elif action == 'selectFeature' or action == 'selectFeatures' or action == 'editFeature':
+        feature_ids = data.get('ids')
+        if feature_ids is None:
+            feature_ids = [data['id']]
         ret = True
 
         design: adsk.fusion.Design = app.activeProduct
-        entity = obj.entity
-
-        # Making this in a transactory way so the current selection is not removed
-        # if the entity is not selectable.
-        newSelection = adsk.core.ObjectCollection.create()
-
-        if isinstance(entity, adsk.fusion.Occurrence):
-            associated_component = entity.sourceComponent
-        elif isinstance(entity, adsk.fusion.ConstructionPlane):
-            associated_component = entity.parent
+        if action == 'selectFeatures':
+            if len(feature_ids) == 0:
+                ui.activeSelections.all = adsk.core.ObjectCollection.create()
+            else:
+                ret, selection_error = select_timeline_entities(feature_ids, design)
+                if not ret:
+                    # Palette rows such as timeline groups are valid UI selections
+                    # but do not map to selectable Fusion entities. Keep the local
+                    # row highlight and clear Fusion's active selection silently.
+                    ui.activeSelections.all = adsk.core.ObjectCollection.create()
+                    ret = True
         else:
-            associated_component = entity.parentComponent
+            node = timeline_cache_map[feature_ids[0]]
+            obj = node.obj
+            entity = get_timeline_entity(obj)
+            if not entity:
+                ret = False
+            else:
+                ret, selection_error = select_timeline_entity(entity, design)
+                if not ret:
+                    ui.messageBox(f'Failed to select {featuremanagerlib.utils.short_class(entity)}: {selection_error}')
+                    ret = False
 
-        if associated_component == design.rootComponent:
-            # There are no occurrences of root. Just a single instance: root. Can select the entity directly.
-            newSelection.add(entity)
-        else:
-            #Using _all_OccurrencesByComponent to get nested occurrences.
-            in_occurrences = design.rootComponent.allOccurrencesByComponent(associated_component)
-            if hasattr(entity, 'createForAssemblyContext'):
-                for occurrence in in_occurrences:
-                    proxy = entity.createForAssemblyContext(occurrence)
-                    newSelection.add(proxy)
-            elif hasattr(entity, 'bodies'):
-                # Workaround for Feature objects
-                ### TODO: Correctly select Feature objects. E.g. BoxFeature, CylinderFeature, ...
-                ###       so that editing them works.
-                for body in entity.bodies:
-                    for occurrence in in_occurrences:
-                        proxy = body.createForAssemblyContext(occurrence)
-                        newSelection.add(proxy)
-
-        try:
-            ui.activeSelections.all = newSelection
-        except Exception as e:
-            ui.messageBox(f'Failed to select {thomasa88lib.utils.short_class(entity)}: {e}')
-            ret = False
-        
         if ret and action == 'editFeature':
+            node = timeline_cache_map[feature_ids[0]]
+            obj = node.obj
+            entity = get_timeline_entity(obj)
+            if not entity:
+                ret = False
             command_id = get_feature_edit_command_id(obj)
-            if command_id:
+            if ret and command_id and ui.commandDefinitions.itemById(command_id):
                 #print("T", ui.terminateActiveCommand())
                 ui.commandDefinitions.itemById(command_id).execute()
-            else:
-                ui.messageBox(f'Editing {thomasa88lib.utils.short_class(entity)} feature is not supported')
+            elif ret:
+                ui.messageBox(f'Editing {featuremanagerlib.utils.short_class(entity)} feature is not supported')
                 ret = False
         html_commands.append(ret)
+    elif action == 'executeFeatureCommand':
+        feature_ids = data.get('ids')
+        if feature_ids is None:
+            feature_ids = [data['id']]
+        command_id = data.get('command-id')
+        ret = False
+        if len(feature_ids) == 0:
+            ui.messageBox('No timeline items selected')
+        elif command_id not in ALLOWED_FEATURE_COMMANDS:
+            ui.messageBox(f'Unsupported context menu command: {command_id}')
+        else:
+            design: adsk.fusion.Design = app.activeProduct
+            ret, selection_error = select_timeline_entities(feature_ids, design)
+            if not ret:
+                ui.messageBox(f'Failed to select timeline items: {selection_error}')
+            else:
+                command_definition = ui.commandDefinitions.itemById(command_id)
+                if command_definition:
+                    command_definition.execute()
+                    ret = True
+                else:
+                    ui.messageBox(f'Fusion command is not available: {command_id}')
+                    ret = False
+        html_commands.append(ret)
+        html_commands.append(invalidate(send=False))
     elif action == 'rollToFeature':
         node = timeline_cache_map[data['id']]
         obj = node.obj
@@ -696,8 +960,73 @@ def palette_incoming_from_html_handler(args):
             # Cannot move to object inside collapsed group.
             # Move to the group instead.
             obj = obj.parentGroup
-        html_commands.append(obj.rollTo(False))
+        ret = obj.rollTo(False)
+        if ret:
+            schedule_palette_refresh([0.15, 0.5])
+        html_commands.append(ret)
         html_commands.append(invalidate(send=False))
+    elif action == 'reorderFeature':
+        node = timeline_cache_map[data['id']]
+        obj = node.obj
+        before_position = int(data['before-position'])
+        ret = False
+        timeline_status, timeline = featuremanagerlib.timeline.get_timeline()
+        if timeline_status == TIMELINE_STATUS_OK:
+            if before_position == node.marker_position or before_position == node.marker_after_position:
+                ret = True
+            else:
+                if before_position >= timeline.count:
+                    ret, reorder_error = reorder_timeline_object_to_end(obj, timeline)
+                    if ret:
+                        schedule_palette_refresh([0.15, 0.5])
+                    elif reorder_error:
+                        ui.messageBox(f'Failed to reorder timeline item: {reorder_error}')
+                else:
+                    before_index = before_position
+                    try:
+                        if obj.canReorder(before_index):
+                            ret = obj.reorder(before_index)
+                            if ret:
+                                schedule_palette_refresh([0.15, 0.5])
+                        else:
+                            ui.messageBox('Fusion cannot reorder this timeline item to that position.')
+                    except Exception as reorder_error:
+                        if ('featureAtIndex' in str(reorder_error)
+                            and timeline_object_is_at_reorder_target(obj, before_index, timeline)):
+                            ret = True
+                            schedule_palette_refresh([0.15, 0.5])
+                        else:
+                            ui.messageBox(f'Failed to reorder timeline item: {reorder_error}')
+        html_commands.append(ret)
+        html_commands.append(invalidate(send=False))
+    elif action == 'setGroupCollapsed':
+        node = timeline_cache_map[data['id']]
+        obj = node.obj
+        ret = False
+        collapsed = bool(data['collapsed'])
+        if obj.isGroup:
+            obj.isCollapsed = collapsed
+            ret = True
+        html_commands.append(ret)
+        refresh_command = invalidate(send=False)
+        if ret and refresh_command:
+            update_feature_by_id(refresh_command['data']['features'], str(data['id']), {'collapsed': collapsed})
+        html_commands.append(refresh_command)
+    elif action == 'setMarkerPosition':
+        timeline_status, timeline = featuremanagerlib.timeline.get_timeline()
+        ret = False
+        marker_position = None
+        if timeline_status == TIMELINE_STATUS_OK:
+            marker_position = int(data['position'])
+            marker_position = max(0, min(marker_position, timeline.count))
+            timeline.markerPosition = marker_position
+            ret = True
+            schedule_palette_refresh([0.15, 0.5])
+        html_commands.append(ret)
+        refresh_command = invalidate(send=False)
+        if ret and refresh_command:
+            refresh_command['data']['marker-position'] = marker_position
+        html_commands.append(refresh_command)
 
     if html_commands:
         htmlArgs.returnData = json.dumps(html_commands)
@@ -722,22 +1051,22 @@ def command_terminated_handler(args):
 
 def trace_feature_image(command_terminated_event_args):
     ''' Development function to trace feature images '''
-    _, timeline = thomasa88lib.timeline.get_timeline()
+    _, timeline = featuremanagerlib.timeline.get_timeline()
     feature = None
     if timeline:
         try:
-            feature = thomasa88lib.utils.short_class(timeline.item(timeline.count-1).entity)
+            feature = featuremanagerlib.utils.short_class(timeline.item(timeline.count-1).entity)
         except Exception as e:
             feature = str(e)
     folder = command_terminated_event_args.commandDefinition.resourceFolder
     if folder:
-        folder = folder.replace(thomasa88lib.utils.get_fusion_deploy_folder() + '/', '')
+        folder = folder.replace(featuremanagerlib.utils.get_fusion_deploy_folder() + '/', '')
     print(f"'{feature}': ('{folder}', ''),")
 
 #########################################################################################
 # app.product is not ready at workspaceActivated, but documentActivated does not fire
 # when switching to/from Drawing. However, in that case, it seems that the product is
-# ready when we call thomasa88lib.timeline.get_timeline (presumably since the panel has to be recreated)
+# ready when we call featuremanagerlib.timeline.get_timeline (presumably since the panel has to be recreated)
 # Bug: https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-application-documentactivated-event-do-not-raise/m-p/9020750
 #
 # PLM360OpenAttachmentCommand + MarkDocumentsForOpenCommand could possibly be used as
@@ -752,13 +1081,16 @@ def trace_feature_image(command_terminated_event_args):
 
 def workspace_pre_deactivate_handler(args):
     #eventArgs = adsk.core.DocumentEventArgs.cast(args)
+    debug_log('workspace pre-deactivate')
     if get_enabled():
         invalidate(clear=True)
 
 def workspace_activated_handler(args):
     #eventArgs = adsk.core.WorkspaceEventArgs.cast(args)
 
-    if ui.activeWorkspace.id == 'FusionSolidEnvironment':
+    active_workspace_id = get_active_workspace_id()
+    debug_log(f'workspace activated id="{active_workspace_id}"')
+    if active_workspace_id == 'FusionSolidEnvironment':
         if get_enabled():
             show_palette()
     else:
@@ -767,7 +1099,9 @@ def workspace_activated_handler(args):
 
 def document_activated_handler(args):
     #eventArgs = adsk.core.DocumentEventArgs.cast(args)
-    if ui.activeWorkspace.id == 'FusionSolidEnvironment':
+    active_workspace_id = get_active_workspace_id()
+    debug_log(f'document activated workspace id="{active_workspace_id}"')
+    if active_workspace_id == 'FusionSolidEnvironment':
         if get_enabled():
             show_palette()
 

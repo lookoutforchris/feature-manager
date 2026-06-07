@@ -6,10 +6,9 @@ provides a vertical timeline.
 
 Copyright (C) 2020  Thomas Axelsson
 
-This work is dual-licensed under GPL 3.0 (or any later version) and MIT.
-You can choose between one of them if you use this work.
+This fork elects the MIT license from the original dual-license grant.
 
-SPDX-License-Identifier: GPL-3.0-or-later OR MIT
+SPDX-License-Identifier: MIT
 
 -->
 <html>
@@ -18,6 +17,14 @@ SPDX-License-Identifier: GPL-3.0-or-later OR MIT
             body {
                 font-family: Arial, Helvetica, sans-serif;
                 font-size: 12px;
+            }
+            body.dragging-history-marker {
+                cursor: ns-resize;
+                user-select: none;
+            }
+            body.dragging-feature {
+                cursor: ns-resize;
+                user-select: none;
             }
             #content {
                 display: flex;
@@ -38,39 +45,138 @@ SPDX-License-Identifier: GPL-3.0-or-later OR MIT
             .feature:hover {
                 background-color: #d9d9d9;
             }
-            .first-rolled-back {
-                border-top: 3px solid silver;
+            .feature.selected {
+                background-color: #cfe8ff;
+            }
+            .feature.context-menu-source {
+                background-color: lightblue;
+            }
+            .feature.drag-source {
+                opacity: 0.5;
+            }
+            .context-menu {
+                background-color: #46546a;
+                border: 1px solid #2f3b4e;
+                box-sizing: border-box;
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+                color: white;
+                display: none;
+                font-size: 14px;
+                width: 300px;
+                padding: 4px 0;
+                position: fixed;
+                z-index: 1000;
+            }
+            .context-menu.visible {
+                display: block;
+            }
+            .context-menu-item {
+                align-items: center;
+                cursor: default;
+                display: grid;
+                grid-template-columns: 24px 1fr auto;
+                gap: 8px;
+                line-height: 22px;
+                padding: 2px 10px;
+                white-space: nowrap;
+            }
+            .context-menu-item:hover {
+                background-color: #5d6c84;
+            }
+            .context-menu-item.disabled {
+                color: #b7bfca;
+            }
+            .context-menu-item.disabled:hover {
+                background-color: transparent;
+            }
+            .context-menu-separator {
+                border-top: 1px solid #b7bfca;
+                margin: 4px 6px;
+            }
+            .context-menu-icon {
+                color: #c8d6eb;
+                text-align: center;
+            }
+            .context-menu-shortcut {
+                padding-left: 24px;
+            }
+            .marker-drop-zone {
+                height: 10px;
+                list-style-type: none;
+                position: relative;
+            }
+            .marker-drop-zone:hover,
+            .marker-drop-zone.drag-over {
+                background-color: #cfe8ff;
+            }
+            body.dragging-feature .marker-drop-zone {
+                height: 16px;
+            }
+            body.dragging-feature .marker-drop-zone.final-marker-drop-zone {
+                height: 64px;
+            }
+            body.dragging-feature .marker-drop-zone.drag-over {
+                background-color: transparent;
+            }
+            body.dragging-feature .marker-drop-zone.drag-over::after {
+                content: "";
+                position: absolute;
+                left: 0;
+                right: 0;
+                top: 7px;
+                height: 2px;
+                background-color: #2b7cff;
+            }
+            .history-marker {
+                display: block;
+                position: absolute;
+                left: 0;
+                right: 0;
+                top: 4px;
+                height: 2px;
+                background-color: #2b7cff;
+                cursor: ns-resize;
+            }
+            .history-marker::before {
+                content: "";
+                position: absolute;
+                left: 0;
+                top: -6px;
+                width: 14px;
+                height: 14px;
+                border-radius: 50%;
+                background-color: #2b7cff;
             }
             .feature-group-header {
-                border: 1px solid black;
-                border-bottom: none;
-                /* Border compensation */
                 padding-left: 4px;
                 padding-right: 4px;
             }
             .feature-group-header.collapsed {
-                border-bottom: 1px solid black;
+                border-bottom: none;
             }
             .feature-group {
-                border: 1px solid black;
-                border-top: none;
+                padding-left: 30px;
             }
             .feature-group.collapsed {
                 display: none;
             }
             .group-toggle {
-                display: inline-block;
-                height: 16px;
-                width: 12px;
+                align-items: center;
+                display: inline-flex;
+                cursor: pointer;
+                justify-content: center;
+                height: 22px;
+                line-height: 20px;
+                text-align: center;
+                vertical-align: middle;
+                width: 22px;
             }
-            .group-toggle::before {
-                content: "－";
-            }
-            .group-toggle.collapsed::before {
-                content: "＋";
+            .group-toggle img {
+                height: 10px;
+                width: 10px;
             }
             .parents-container, .group-toggle {
-                min-width: 12px;
+                min-width: 22px;
             }
             .parents-container {
                 display: inline-block;
@@ -83,10 +189,13 @@ SPDX-License-Identifier: GPL-3.0-or-later OR MIT
                 margin-right: 2px;
             }
             .icon {
-                width: 16px;
-                height: 16px;
+                width: 20px;
+                height: 20px;
                 vertical-align: middle;
                 padding: 2px;
+            }
+            .feature-group-header .icon {
+                cursor: pointer;
             }
             .name {
                 margin-left: 5px;
@@ -115,10 +224,8 @@ SPDX-License-Identifier: GPL-3.0-or-later OR MIT
                     
                 </div>
             </div>
-            <div>
-                 by Thomas Axelsson 2020
-            </div>
         </div>
+        <div id="context-menu" class="context-menu"></div>
     </body>
     <script>
     // Can't access the colors from Fusion, so making up our own
@@ -134,6 +241,17 @@ SPDX-License-Identifier: GPL-3.0-or-later OR MIT
     var collapsedGroups = new Set();
 
     var cancelingEdit = false;
+    var readySent = false;
+    var draggingMarker = false;
+    var activeMarkerDropZone = null;
+    var lastTimelineData = null;
+    var contextMenuFeature = null;
+    var selectedFeatureIds = new Set();
+    var lastSelectedFeatureId = null;
+    var draggedFeatureId = null;
+    var draggedFeatureItem = null;
+    var pendingFeatureDrag = null;
+    var suppressNextFeatureClick = false;
 
     window.fusionJavaScriptHandler = {handle: function(action, jsonData){
         console.log("Got command:", action);
@@ -145,12 +263,17 @@ SPDX-License-Identifier: GPL-3.0-or-later OR MIT
         try {
             switch (action) {
                 case 'setTimeline':
+                    lastTimelineData = data;
                     let message = document.getElementById('message');
                     message.innerText = data['message'];
 
                     let timeline = document.getElementById('timeline');
                     timeline.innerHTML = '';
-                    appendItems(timeline, data['features'], data['max-parents'])
+                    appendItems(timeline,
+                                data['features'],
+                                data['max-parents'],
+                                data['marker-position'],
+                                data['timeline-count']);
 
                     break;
                 case 'debugger':
@@ -165,28 +288,48 @@ SPDX-License-Identifier: GPL-3.0-or-later OR MIT
         return 'OK';
     }
 
-    function appendItems(parent, features, maxParents, isGroup=false) {
+    function appendItems(parent, features, maxParents, markerPosition, finalMarkerPosition=null, isGroup=false, markerRenderState=null) {
+        if (markerRenderState === null) {
+            markerRenderState = { activeMarkerRendered: false };
+        }
         let list = document.createElement('ul');
         if (isGroup) {
             list.classList.add('feature-group');
         }
         let firstRolledBack = true;
+        let renderedMarkerPositions = new Set();
+        let nestedMarkerPositions = new Set();
         for (const feature of features) {
+            let renderMarkerBeforeFeature = !(feature.type == 'GROUP' && feature.children && feature.children.length > 0);
+            if (renderMarkerBeforeFeature &&
+                !renderedMarkerPositions.has(feature['marker-position']) &&
+                !nestedMarkerPositions.has(feature['marker-position'])) {
+                appendMarkerDropZone(list, feature['marker-position'], markerPosition, markerRenderState);
+                renderedMarkerPositions.add(feature['marker-position']);
+            }
+
             let listItem = document.createElement('li');
             listItem.classList.add('feature');
-            if (feature.suppressed || feature.rolledBack) {
+            let isAfterMarker = markerPosition !== null && feature['marker-position'] >= markerPosition;
+            let isRolledBack = feature.rolledBack || isAfterMarker;
+            if (feature.suppressed || isRolledBack) {
                 listItem.classList.add('suppressed');
-                if (feature.rolledBack && firstRolledBack) {
+                if (isRolledBack && firstRolledBack) {
                     firstRolledBack = false;
                     listItem.classList.add('first-rolled-back');
                 }
             }
             listItem.setAttribute('data-id', feature['id']);
             listItem.setAttribute('data-name', feature.name);
+            listItem.setAttribute('data-type', feature.type);
+            if (selectedFeatureIds.has(String(feature['id']))) {
+                listItem.classList.add('selected');
+            }
 
             listItem.addEventListener('click', onFeatureClick);
             listItem.addEventListener('dblclick', onFeatureDoubleClick);
             listItem.addEventListener('contextmenu', onFeatureContextMenu);
+            listItem.addEventListener('mousedown', onFeatureMouseDown);
 
             if (feature['edit-name']) {
                 listItem.setAttribute('data-edit-name', feature['edit-name']);
@@ -197,6 +340,11 @@ SPDX-License-Identifier: GPL-3.0-or-later OR MIT
             if (feature.type == 'GROUP') {
                 groupToggle = document.createElement('span');
                 groupToggle.classList.add('group-toggle');
+                listItem.setAttribute('data-expanded-image', feature['expanded-image']);
+                listItem.setAttribute('data-collapsed-image', feature['collapsed-image']);
+                let groupToggleImage = document.createElement('img');
+                groupToggleImage.src = feature.collapsed ? feature['collapsed-image'] : feature['expanded-image'];
+                groupToggle.appendChild(groupToggleImage);
                 listItem.appendChild(groupToggle);
             } else {
                 let parents = feature['parent-components'];
@@ -205,7 +353,7 @@ SPDX-License-Identifier: GPL-3.0-or-later OR MIT
                 }
                 addParentBars(listItem, feature, maxParents);
             }
-            listItem.title = `${titlePrefix}Right-click to roll here.`;
+            listItem.title = titlePrefix.trim();
 
             let image = document.createElement('img');
             image.src = feature['image'];
@@ -230,30 +378,63 @@ SPDX-License-Identifier: GPL-3.0-or-later OR MIT
 
             list.appendChild(listItem);
             if (feature.type == 'GROUP') {
+                nestedMarkerPositions.add(feature['marker-position']);
                 listItem.classList.add('feature-group-header');
                 listItem.title = 'Group';
+                listItem.setAttribute('data-collapsed', feature.collapsed);
 
-                groupList = appendItems(list, feature.children, maxParents, true);
-                groupToggle.addEventListener('click', () => {
-                    let collapse = !collapsedGroups.has(feature.name);
-                    if (collapse) {
-                        collapsedGroups.add(feature.name);
-                    } else {
-                        collapsedGroups.delete(feature.name);
-                    }
-                    listItem.classList.toggle('collapsed', collapse);
-                    groupToggle.classList.toggle('collapsed', collapse);
-                    groupList.classList.toggle('collapsed', collapse);
-                });
-                if (collapsedGroups.has(feature.name)) {
+                let groupList = appendItems(list, feature.children, maxParents, markerPosition, feature['marker-after-position'], true, markerRenderState);
+                let toggleGroup = (event) => {
+                    setGroupCollapsed(listItem, groupList, !isGroupCollapsed(listItem));
+                    event.preventDefault();
+                    event.stopPropagation();
+                };
+                groupToggle.addEventListener('click', toggleGroup);
+                image.addEventListener('click', toggleGroup);
+                if (feature.collapsed || collapsedGroups.has(feature.name)) {
                     listItem.classList.add('collapsed');
                     groupToggle.classList.add('collapsed');
                     groupList.classList.add('collapsed');
+                    listItem.setAttribute('data-collapsed', true);
                 }
             }
         }
+        if (!isGroup &&
+            finalMarkerPosition !== null &&
+            !renderedMarkerPositions.has(finalMarkerPosition) &&
+            !nestedMarkerPositions.has(finalMarkerPosition)) {
+            appendMarkerDropZone(list, finalMarkerPosition, markerPosition, markerRenderState, true);
+        }
         parent.appendChild(list);
         return list;
+    }
+
+    function appendMarkerDropZone(parent, position, markerPosition, markerRenderState, isFinal=false) {
+        let markerDropZone = document.createElement('li');
+        markerDropZone.classList.add('marker-drop-zone');
+        if (isFinal) {
+            markerDropZone.classList.add('final-marker-drop-zone');
+        }
+        markerDropZone.setAttribute('data-position', position);
+        markerDropZone.title = `Move history marker to position ${position}`;
+
+        markerDropZone.addEventListener('dragover', onMarkerDragOver);
+        markerDropZone.addEventListener('dragleave', onMarkerDragLeave);
+        markerDropZone.addEventListener('drop', onMarkerDrop);
+        if (position == markerPosition && !markerRenderState.activeMarkerRendered) {
+            markerDropZone.appendChild(createHistoryMarker());
+            markerRenderState.activeMarkerRendered = true;
+        }
+
+        parent.appendChild(markerDropZone);
+    }
+
+    function createHistoryMarker() {
+        let marker = document.createElement('span');
+        marker.classList.add('history-marker');
+        marker.title = 'Drag history marker';
+        marker.addEventListener('mousedown', onMarkerMouseDown);
+        return marker;
     }
 
     function addParentBars(item, feature, maxParents) {
@@ -327,19 +508,19 @@ SPDX-License-Identifier: GPL-3.0-or-later OR MIT
     }
 
     function onFeatureClick(e) {
-        let item = e.target;
-        console.log("feature click")
-        // Disabling event capturing does not seem to work,
-        // so using this test to avoid trigger on name click.
-        // Clicking on the icon should also go here!
-        if (item.classList.contains('icon')) {
-            item = e.target.parentElement;
+        if (suppressNextFeatureClick) {
+            suppressNextFeatureClick = false;
+            e.preventDefault();
+            e.stopPropagation();
+            return;
         }
+        let item = e.target.closest('.feature');
         if (!item.classList.contains('feature')) {
             return;
         }
 
-        let ret = query('selectFeature', { 'id': parseInt(item.getAttribute('data-id')) } );
+        updateFeatureSelection(item, e.ctrlKey || e.metaKey, e.shiftKey);
+        let ret = query('selectFeatures', { 'ids': getSelectedFeatureIds() } );
         processCommands(ret);
     }
 
@@ -350,19 +531,468 @@ SPDX-License-Identifier: GPL-3.0-or-later OR MIT
         processCommands(ret);
     }
 
+    function getFeatureItems() {
+        return Array.from(document.querySelectorAll('.feature'));
+    }
+
+    function getSelectedFeatureIds() {
+        return Array.from(selectedFeatureIds).map(id => parseInt(id));
+    }
+
+    function setSelectedFeatureIds(ids) {
+        selectedFeatureIds = new Set(ids.map(id => String(id)));
+        for (const feature of getFeatureItems()) {
+            feature.classList.toggle('selected', selectedFeatureIds.has(feature.getAttribute('data-id')));
+        }
+        if (ids.length > 0) {
+            lastSelectedFeatureId = String(ids[ids.length - 1]);
+        }
+    }
+
+    function updateFeatureSelection(item, ctrlKey, shiftKey) {
+        let id = item.getAttribute('data-id');
+        let items = getFeatureItems();
+
+        if (shiftKey && lastSelectedFeatureId !== null) {
+            let start = items.findIndex(feature => feature.getAttribute('data-id') == lastSelectedFeatureId);
+            let end = items.indexOf(item);
+            if (start >= 0 && end >= 0) {
+                let first = Math.min(start, end);
+                let last = Math.max(start, end);
+                setSelectedFeatureIds(items.slice(first, last + 1).map(feature => feature.getAttribute('data-id')));
+                return;
+            }
+        }
+
+        if (ctrlKey) {
+            let ids = new Set(selectedFeatureIds);
+            if (ids.has(id)) {
+                ids.delete(id);
+            } else {
+                ids.add(id);
+            }
+            setSelectedFeatureIds(Array.from(ids));
+            lastSelectedFeatureId = id;
+            return;
+        }
+
+        setSelectedFeatureIds([id]);
+    }
+
     function onFeatureContextMenu(e) {
-        if (e.target.classList.contains('name')) {
-            // Don't block normal right click in text edit
+        let item = e.target.closest('.feature');
+        if (!item) {
+            hideContextMenu();
             return true;
         }
 
-        let item = e.target.closest('.feature');
-        let ret = query('rollToFeature', { 'id': parseInt(item.getAttribute('data-id')) } );
-        processCommands(ret);
-        
-        // Block context menu
+        if (!item.classList.contains('selected')) {
+            setSelectedFeatureIds([item.getAttribute('data-id')]);
+            let ret = query('selectFeatures', { 'ids': getSelectedFeatureIds() } );
+            processCommands(ret);
+        }
+        showFeatureContextMenu(e, item);
         e.preventDefault();
         return false;
+    }
+
+    function showFeatureContextMenu(e, item) {
+        hideContextMenu();
+        contextMenuFeature = item;
+        contextMenuFeature.classList.add('context-menu-source');
+        let menu = document.getElementById('context-menu');
+        menu.innerHTML = '';
+
+        let selectedCount = selectedFeatureIds.size;
+        if (selectedCount > 1) {
+            addMultiFeatureContextMenuItems(menu, selectedCount);
+        } else if (item.getAttribute('data-type') == 'GROUP') {
+            addGroupContextMenuItems(menu, item);
+        } else {
+            addFeatureContextMenuItems(menu);
+        }
+
+        menu.classList.add('visible');
+        let rowBounds = item.getBoundingClientRect();
+        let x = 125;
+        let y = rowBounds.top + 12;
+        if (x + menu.offsetWidth > window.innerWidth - 4) {
+            x = Math.min(e.clientX + 12, window.innerWidth - menu.offsetWidth - 4);
+        }
+        if (y + menu.offsetHeight > window.innerHeight - 4) {
+            y = window.innerHeight - menu.offsetHeight - 4;
+        }
+        menu.style.left = `${Math.max(0, x)}px`;
+        menu.style.top = `${Math.max(0, y)}px`;
+    }
+
+    function addFeatureContextMenuItems(menu) {
+        addContextMenuItem(menu, 'set', 'Create Selection Set', () => executeFusionFeatureCommand('CreateSelectionGroupCmd'));
+        addContextMenuSeparator(menu);
+        addContextMenuItem(menu, 'edit', 'Edit Feature', editContextFeature);
+        addContextMenuItem(menu, 'sk', 'Edit Profile Sketch', null, '', true);
+        addContextMenuItem(menu, 'cfg', 'Configure', null, '', true);
+        addContextMenuSeparator(menu);
+        addContextMenuItem(menu, 'del', 'Delete', () => executeFusionFeatureCommand('FusionDeleteCommand'), 'Del');
+        addContextMenuItem(menu, 'ren', 'Rename', renameContextFeature);
+        addContextMenuSeparator(menu);
+        addContextMenuItem(menu, 'roll', 'Roll Timeline Marker Here', rollContextFeature);
+        addContextMenuItem(menu, 'dm', 'Convert to DM Feature', null, '', true);
+        addContextMenuItem(menu, 'sup', 'Suppress Features', null, '', true);
+        addContextMenuSeparator(menu);
+        addContextMenuItem(menu, 'br', 'Find in Browser', null, '', true);
+        addContextMenuItem(menu, 'win', 'Find in Window', null, '', true);
+    }
+
+    function addMultiFeatureContextMenuItems(menu, selectedCount) {
+        addContextMenuItem(menu, 'set', `Create Selection Set (${selectedCount})`, () => executeFusionFeatureCommand('CreateSelectionGroupCmd'));
+        addContextMenuSeparator(menu);
+        addContextMenuItem(menu, 'grp', 'Group Selected Features', null, '', true);
+        addContextMenuItem(menu, 'ung', 'Ungroup Selected Groups', null, '', true);
+        addContextMenuSeparator(menu);
+        addContextMenuItem(menu, 'del', `Delete ${selectedCount} Items`, () => executeFusionFeatureCommand('FusionDeleteCommand'), 'Del');
+        addContextMenuItem(menu, 'sup', 'Suppress Selected Features', null, '', true);
+    }
+
+    function addGroupContextMenuItems(menu, item) {
+        let collapsed = isGroupCollapsed(item);
+        addContextMenuItem(menu, 'ren', 'Rename Group', renameContextFeature);
+        addContextMenuItem(menu, collapsed ? 'exp' : 'col', collapsed ? 'Expand Group' : 'Collapse Group', toggleContextGroupCollapsed);
+        addContextMenuSeparator(menu);
+        addContextMenuItem(menu, 'roll', 'Roll Timeline Marker Here', rollContextFeature);
+        addContextMenuSeparator(menu);
+        addContextMenuItem(menu, 'up', 'Move Group Up', null, '', true);
+        addContextMenuItem(menu, 'dn', 'Move Group Down', null, '', true);
+        addContextMenuItem(menu, 'del', 'Delete Group / Ungroup', null, '', true);
+    }
+
+    function addContextMenuItem(menu, icon, label, action, shortcut='', disabled=false) {
+        let item = document.createElement('div');
+        item.classList.add('context-menu-item');
+        if (disabled) {
+            item.classList.add('disabled');
+        }
+
+        let iconElement = document.createElement('span');
+        iconElement.classList.add('context-menu-icon');
+        iconElement.innerText = icon;
+
+        let labelElement = document.createElement('span');
+        labelElement.innerText = label;
+
+        let shortcutElement = document.createElement('span');
+        shortcutElement.classList.add('context-menu-shortcut');
+        shortcutElement.innerText = shortcut;
+
+        item.appendChild(iconElement);
+        item.appendChild(labelElement);
+        item.appendChild(shortcutElement);
+
+        if (!disabled && action) {
+            item.addEventListener('click', (event) => {
+                action();
+                hideContextMenu();
+                event.stopPropagation();
+            });
+        }
+        menu.appendChild(item);
+    }
+
+    function addContextMenuSeparator(menu) {
+        let separator = document.createElement('div');
+        separator.classList.add('context-menu-separator');
+        menu.appendChild(separator);
+    }
+
+    function hideContextMenu() {
+        let menu = document.getElementById('context-menu');
+        menu.classList.remove('visible');
+        if (contextMenuFeature) {
+            contextMenuFeature.classList.remove('context-menu-source');
+        }
+        contextMenuFeature = null;
+    }
+
+    function getContextFeatureId() {
+        return parseInt(contextMenuFeature.getAttribute('data-id'));
+    }
+
+    function getContextFeatureIds() {
+        let ids = getSelectedFeatureIds();
+        if (ids.length == 0 && contextMenuFeature) {
+            ids = [getContextFeatureId()];
+        }
+        return ids;
+    }
+
+    function editContextFeature() {
+        let ret = query('editFeature', { 'id': getContextFeatureId() });
+        processCommands(ret);
+    }
+
+    function renameContextFeature() {
+        let nameElement = contextMenuFeature.querySelector('.name');
+        if (nameElement) {
+            nameElement.focus();
+            selectElementContents(nameElement);
+        }
+    }
+
+    function rollContextFeature() {
+        let ret = query('rollToFeature', { 'id': getContextFeatureId() });
+        processCommands(ret);
+    }
+
+    function toggleContextGroupCollapsed() {
+        let groupList = contextMenuFeature.nextSibling;
+        setGroupCollapsed(contextMenuFeature, groupList, !isGroupCollapsed(contextMenuFeature));
+    }
+
+    function isGroupCollapsed(item) {
+        return item.getAttribute('data-collapsed') == 'true';
+    }
+
+    function setGroupCollapsed(item, groupList, collapsed) {
+        if (collapsed) {
+            collapsedGroups.add(item.getAttribute('data-name'));
+        } else {
+            collapsedGroups.delete(item.getAttribute('data-name'));
+        }
+        renderGroupCollapsedState(item.getAttribute('data-id'), collapsed);
+
+        let ret = query('setGroupCollapsed', {
+            'id': parseInt(item.getAttribute('data-id')),
+            'collapsed': collapsed
+        });
+        processCommands(ret.slice(1));
+        renderGroupCollapsedState(item.getAttribute('data-id'), collapsed);
+    }
+
+    function renderGroupCollapsedState(id, collapsed) {
+        let item = document.querySelector(`.feature[data-id="${id}"]`);
+        if (!item) {
+            return;
+        }
+        let groupList = item.nextSibling;
+        item.setAttribute('data-collapsed', collapsed);
+        item.classList.toggle('collapsed', collapsed);
+        let groupToggle = item.querySelector('.group-toggle');
+        if (groupToggle) {
+            groupToggle.classList.toggle('collapsed', collapsed);
+            let toggleImage = groupToggle.querySelector('img');
+            if (toggleImage) {
+                toggleImage.src = collapsed ? item.getAttribute('data-collapsed-image') : item.getAttribute('data-expanded-image');
+            }
+        }
+        if (groupList) {
+            groupList.classList.toggle('collapsed', collapsed);
+        }
+    }
+
+    function executeFusionFeatureCommand(commandId) {
+        let ret = query('executeFeatureCommand', { 'ids': getContextFeatureIds(), 'command-id': commandId });
+        processCommands(ret.slice(1));
+    }
+
+    function onMarkerMouseDown(e) {
+        draggingMarker = true;
+        document.body.classList.add('dragging-history-marker');
+        setActiveMarkerDropZone(e.target.closest('.marker-drop-zone'));
+        document.addEventListener('mousemove', onMarkerMouseMove);
+        document.addEventListener('mouseup', onMarkerMouseUp);
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    function onMarkerMouseMove(e) {
+        if (!draggingMarker) {
+            return;
+        }
+        let zone = getMarkerDropZoneAtPoint(e.clientY);
+        setActiveMarkerDropZone(zone);
+        if (zone) {
+            renderTimelineAtMarkerPosition(parseInt(zone.getAttribute('data-position')));
+        }
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    function onMarkerMouseUp(e) {
+        if (!draggingMarker) {
+            return;
+        }
+        finishMarkerDrag(getMarkerDropZoneAtPoint(e.clientY) || activeMarkerDropZone);
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    function finishMarkerDrag(zone) {
+        draggingMarker = false;
+        document.body.classList.remove('dragging-history-marker');
+        document.removeEventListener('mousemove', onMarkerMouseMove);
+        document.removeEventListener('mouseup', onMarkerMouseUp);
+
+        if (zone) {
+            setMarkerPosition(parseInt(zone.getAttribute('data-position')));
+        }
+
+        setActiveMarkerDropZone(null);
+    }
+
+    function onFeatureMouseDown(e) {
+        if (pendingFeatureDrag || draggedFeatureId !== null) {
+            finishFeatureDrag();
+        }
+        if (draggingMarker || e.button != 0 || e.target.closest('.group-toggle')) {
+            return;
+        }
+        let item = e.target.closest('.feature');
+        if (!item) {
+            return;
+        }
+        pendingFeatureDrag = {
+            id: parseInt(item.getAttribute('data-id')),
+            item: item,
+            startX: e.clientX,
+            startY: e.clientY
+        };
+        document.addEventListener('mousemove', onFeatureMouseMove);
+        document.addEventListener('mouseup', onFeatureMouseUp);
+    }
+
+    function onFeatureMouseMove(e) {
+        if (!pendingFeatureDrag && draggedFeatureId === null) {
+            return;
+        }
+        if (draggedFeatureId === null) {
+            let dx = Math.abs(e.clientX - pendingFeatureDrag.startX);
+            let dy = Math.abs(e.clientY - pendingFeatureDrag.startY);
+            if (dx < 3 && dy < 3) {
+                return;
+            }
+            draggedFeatureId = pendingFeatureDrag.id;
+            draggedFeatureItem = pendingFeatureDrag.item;
+            draggedFeatureItem.classList.add('drag-source');
+            document.body.classList.add('dragging-feature');
+        }
+        let zone = getMarkerDropZoneAtPoint(e.clientY);
+        setActiveMarkerDropZone(zone);
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    function onFeatureMouseUp(e) {
+        let zone = activeMarkerDropZone;
+        if (draggedFeatureId !== null && zone) {
+            reorderFeature(draggedFeatureId, parseInt(zone.getAttribute('data-position')));
+            suppressNextFeatureClick = true;
+        }
+        finishFeatureDrag();
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    function finishFeatureDrag() {
+        document.removeEventListener('mousemove', onFeatureMouseMove);
+        document.removeEventListener('mouseup', onFeatureMouseUp);
+        document.body.classList.remove('dragging-feature');
+        clearDragOverMarkers();
+        if (draggedFeatureItem) {
+            draggedFeatureItem.classList.remove('drag-source');
+        }
+        pendingFeatureDrag = null;
+        draggedFeatureId = null;
+        draggedFeatureItem = null;
+        setActiveMarkerDropZone(null);
+    }
+
+    function reorderFeature(featureId, beforePosition) {
+        clearDragOverMarkers();
+        document.body.classList.remove('dragging-feature');
+        let ret = query('reorderFeature', { 'id': featureId, 'before-position': beforePosition });
+        processCommands(ret);
+        clearDragOverMarkers();
+    }
+
+    function clearDragOverMarkers() {
+        for (const zone of document.querySelectorAll('.marker-drop-zone.drag-over')) {
+            zone.classList.remove('drag-over');
+        }
+    }
+
+    function getMarkerDropZoneAtPoint(clientY) {
+        let zones = Array.from(document.querySelectorAll('.marker-drop-zone'));
+        if (zones.length == 0) {
+            return null;
+        }
+
+        let closestZone = zones[0];
+        let closestDistance = Infinity;
+        for (const zone of zones) {
+            let rect = zone.getBoundingClientRect();
+            let centerY = rect.top + rect.height / 2;
+            let distance = Math.abs(centerY - clientY);
+            if (distance < closestDistance) {
+                closestZone = zone;
+                closestDistance = distance;
+            }
+        }
+        return closestZone;
+    }
+
+    function setActiveMarkerDropZone(zone) {
+        if (activeMarkerDropZone == zone) {
+            return;
+        }
+        if (activeMarkerDropZone) {
+            activeMarkerDropZone.classList.remove('drag-over');
+        }
+        activeMarkerDropZone = zone;
+        if (activeMarkerDropZone) {
+            activeMarkerDropZone.classList.add('drag-over');
+        }
+    }
+
+    function onMarkerDragOver(e) {
+        if (!draggingMarker && draggedFeatureId === null) {
+            return;
+        }
+        e.preventDefault();
+        e.currentTarget.classList.add('drag-over');
+        e.dataTransfer.dropEffect = 'move';
+    }
+
+    function onMarkerDragLeave(e) {
+        e.currentTarget.classList.remove('drag-over');
+    }
+
+    function onMarkerDrop(e) {
+        if (!draggingMarker && draggedFeatureId === null) {
+            return;
+        }
+        e.preventDefault();
+        e.currentTarget.classList.remove('drag-over');
+        if (draggedFeatureId !== null) {
+            reorderFeature(draggedFeatureId, parseInt(e.currentTarget.getAttribute('data-position')));
+        } else {
+            setMarkerPosition(parseInt(e.currentTarget.getAttribute('data-position')));
+        }
+    }
+
+    function setMarkerPosition(position) {
+        let ret = query('setMarkerPosition', { 'position': position });
+        let succeeded = ret[0] === true;
+        processCommands(ret.slice(1));
+        if (succeeded) {
+            renderTimelineAtMarkerPosition(position);
+        }
+    }
+
+    function renderTimelineAtMarkerPosition(position) {
+        if (lastTimelineData) {
+            lastTimelineData['marker-position'] = position;
+            handle('setTimeline', lastTimelineData);
+        }
     }
 
     function storeFeatureName(item) {
@@ -393,7 +1023,13 @@ SPDX-License-Identifier: GPL-3.0-or-later OR MIT
     }
 
     function processCommands(commands) {
+        if (!commands) {
+            return;
+        }
         for (let command of commands) {
+            if (!command || typeof command !== 'object' || !command['action']) {
+                continue;
+            }
             handle(command['action'], command['data']);
         }
     }
@@ -410,7 +1046,7 @@ SPDX-License-Identifier: GPL-3.0-or-later OR MIT
     }
 
     function waitForSdk() {
-        if (window.adsk) {
+        if (typeof adsk !== 'undefined' && adsk.fusionSendData) {
             ready();
         } else {
             console.log("Waiting for SDK");
@@ -419,11 +1055,36 @@ SPDX-License-Identifier: GPL-3.0-or-later OR MIT
     }
 
     function ready(){
+        if (readySent) {
+            return;
+        }
+        readySent = true;
         console.log("HTML ready");
         send('ready');
     }
 
-    document.body.onload = waitForSdk;
+    document.addEventListener('click', hideContextMenu);
+    document.addEventListener('keydown', (e) => {
+        if (e.key == 'Escape') {
+            hideContextMenu();
+            if (pendingFeatureDrag || draggedFeatureId !== null) {
+                finishFeatureDrag();
+            }
+        }
+    });
+    window.addEventListener('blur', () => {
+        if (pendingFeatureDrag || draggedFeatureId !== null) {
+            finishFeatureDrag();
+        }
+    });
+    document.addEventListener('mouseleave', () => {
+        if (pendingFeatureDrag || draggedFeatureId !== null) {
+            finishFeatureDrag();
+        }
+    });
+    document.addEventListener('DOMContentLoaded', waitForSdk);
+    window.addEventListener('load', waitForSdk);
+    waitForSdk();
     console.log("script end");
     </script>
 </html>
