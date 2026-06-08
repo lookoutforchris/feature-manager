@@ -44,21 +44,30 @@ SPDX-License-Identifier: MIT
                 display: none;
             }
             .feature {
+                align-items: center;
+                background-color: transparent;
+                box-sizing: border-box;
+                color: #ffffff;
+                display: flex;
                 list-style-type: none;
+                margin: 1px 0;
+                min-height: 26px;
+                max-width: calc(100% - 12px);
                 overflow: hidden;
-                white-space: nowrap;
-                text-overflow: ellipsis;
                 padding-left: 5px;
                 padding-right: 5px;
+                text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
+                width: max-content;
+                white-space: nowrap;
             }
-            .feature:hover {
-                background-color: #d9d9d9;
+            .feature:hover .feature-label {
+                background-color: #3f4a5d;
             }
-            .feature.selected {
-                background-color: #cfe8ff;
+            .feature.selected .feature-label {
+                background-color: #3f4a5d;
             }
-            .feature.context-menu-source {
-                background-color: lightblue;
+            .feature.context-menu-source .feature-label {
+                background-color: #3f4a5d;
             }
             .feature.drag-source {
                 opacity: 0.5;
@@ -120,9 +129,11 @@ SPDX-License-Identifier: MIT
                 list-style-type: none;
                 position: relative;
             }
-            .marker-drop-zone:hover,
+            .marker-drop-zone:hover {
+                background-color: transparent;
+            }
             .marker-drop-zone.drag-over {
-                background-color: #cfe8ff;
+                background-color: transparent;
             }
             body.dragging-feature .marker-drop-zone {
                 height: 16px;
@@ -161,6 +172,14 @@ SPDX-License-Identifier: MIT
                 height: 14px;
                 border-radius: 50%;
                 background-color: #2b7cff;
+            }
+            .marker-drop-zone:hover .history-marker,
+            .marker-drop-zone.drag-over .history-marker {
+                background-color: #6fb0ff;
+            }
+            .marker-drop-zone:hover .history-marker::before,
+            .marker-drop-zone.drag-over .history-marker::before {
+                background-color: #6fb0ff;
             }
             .feature-group-header {
                 padding-left: 4px;
@@ -204,24 +223,39 @@ SPDX-License-Identifier: MIT
                 margin-right: 2px;
             }
             .icon {
-                width: 20px;
-                height: 20px;
+                width: 16px;
+                height: 16px;
                 vertical-align: middle;
                 padding: 2px;
+            }
+            .feature-label {
+                align-items: center;
+                display: inline-flex;
+                min-height: 24px;
+                padding-right: 6px;
             }
             .feature-group-header .icon {
                 cursor: pointer;
             }
             .name {
                 margin-left: 5px;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
             .name:hover {
                 outline: 1px solid silver;
             }
             .name:focus {
                 background-color: white;
+                color: #111111;
             }
-            .suppressed {
+            .suppressed .feature-label {
+                opacity: 0.5;
+            }
+            .suppressed.feature-group-header .feature-label {
+                opacity: 1;
+            }
+            .suppressed.feature-group-header .name {
                 opacity: 0.5;
             }
             ul {
@@ -280,6 +314,12 @@ SPDX-License-Identifier: MIT
         try {
             switch (action) {
                 case 'setTimeline':
+                    let previousTimelineData = lastTimelineData;
+                    if (previousTimelineData &&
+                        previousTimelineData['marker-position'] != data['marker-position']) {
+                        clearFeatureSelection();
+                        hideContextMenu();
+                    }
                     lastTimelineData = data;
                     menuIcons = data['menu-icons'] || {};
                     let message = document.getElementById('message');
@@ -377,10 +417,14 @@ SPDX-License-Identifier: MIT
             }
             listItem.title = titlePrefix.trim();
 
+            let label = document.createElement('span');
+            label.classList.add('feature-label');
+            listItem.appendChild(label);
+
             let image = document.createElement('img');
             image.src = feature['image'];
             image.classList.add('icon');
-            listItem.appendChild(image);
+            label.appendChild(image);
 
             let name = document.createElement('span');
             name.classList.add('name');
@@ -389,7 +433,7 @@ SPDX-License-Identifier: MIT
             name.addEventListener('keydown', onFeatureNameClick);
             name.addEventListener('blur', onFeatureNameBlur);
             name.addEventListener('focus', onFeatureNameFocus);
-            listItem.appendChild(name);
+            label.appendChild(name);
 
             // The browser seems to send click to the rightmost span,
             // when clicking outside any span. Add this span to avoid
@@ -455,7 +499,6 @@ SPDX-License-Identifier: MIT
     function createHistoryMarker() {
         let marker = document.createElement('span');
         marker.classList.add('history-marker');
-        marker.title = 'Drag history marker';
         marker.addEventListener('mousedown', onMarkerMouseDown);
         return marker;
     }
@@ -490,7 +533,7 @@ SPDX-License-Identifier: MIT
     }
 
     function onFeatureNameClick(e) {
-        let item = e.target.parentElement;
+        let item = e.target.closest('.feature');
         ESC_KEY = 27;
         ENTER_KEY = 13;
         if (e.which == ESC_KEY) {
@@ -505,7 +548,7 @@ SPDX-License-Identifier: MIT
     }
 
     function onFeatureNameBlur(e) {
-        let item = e.target.parentElement;
+        let item = e.target.closest('.feature');
 
         if (cancelingEdit) {
             cancelingEdit = false;
@@ -517,7 +560,7 @@ SPDX-License-Identifier: MIT
     }
 
     function onFeatureNameFocus(e) {
-        let item = e.target.parentElement;
+        let item = e.target.closest('.feature');
 
         if (item.hasAttribute('data-edit-name')) {
             item.querySelector('.name').innerText = item.getAttribute('data-edit-name');
@@ -569,6 +612,14 @@ SPDX-License-Identifier: MIT
         }
         if (ids.length > 0) {
             lastSelectedFeatureId = String(ids[ids.length - 1]);
+        }
+    }
+
+    function clearFeatureSelection() {
+        selectedFeatureIds.clear();
+        lastSelectedFeatureId = null;
+        for (const feature of getFeatureItems()) {
+            feature.classList.remove('selected');
         }
     }
 

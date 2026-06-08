@@ -414,8 +414,8 @@ def get_features_from_node(timeline_tree_node, component_parent_map):
             # Group
             feature['type'] = 'GROUP'
             feature['image'] = get_fusion_resource_file('Neutron/UI/Base/Resources/Folder/folder.png')
-            feature['expanded-image'] = get_fusion_resource_file('Neutron/UI/Base/Resources/Palette/TipsAndTricks/10x10-ArrowDown.png')
-            feature['collapsed-image'] = get_fusion_resource_file('Neutron/UI/Base/Resources/Palette/TipsAndTricks/10x10-ArrowRight.png')
+            feature['expanded-image'] = get_fusion_resource_file('Neutron/UI/Base/Resources/Palette/TipsAndTricks/10x10-ArrowDown@2x.png')
+            feature['collapsed-image'] = get_fusion_resource_file('Neutron/UI/Base/Resources/Palette/TipsAndTricks/10x10-ArrowRight@2x.png')
             feature['collapsed'] = obj.isCollapsed
             feature['children'], group_max_parents = get_features_from_node(child_node,
                                                                             component_parent_map)
