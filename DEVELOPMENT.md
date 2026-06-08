@@ -2,26 +2,20 @@
 
 ## Clone
 
-Clone the upstream add-in with submodules:
+Clone the repository:
 
 ```powershell
-git clone --recurse-submodules https://github.com/original-author/VerticalTimeline.git
+git clone https://github.com/lookoutforchris/feature-manager.git
 ```
 
-If the repository was cloned without submodules, initialize them from the repo root:
-
-```powershell
-git submodule update --init --recursive
-```
-
-Expected working files include `VerticalTimeline.py`, `VerticalTimeline.manifest`, `palette.html`, `resources/`, and the `featuremanagerlib/` submodule.
+Expected working files include `VerticalTimeline.py`, `VerticalTimeline.manifest`, `palette.html`, `resources/`, and `featuremanagerlib/`.
 
 ## Install in Fusion
 
 For the current Windows Fusion setup, install or copy this folder to:
 
 ```text
-C:\Users\Chris\AppData\Roaming\Autodesk\Autodesk Fusion 360\API\AddIns\VerticalTimeline
+%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\VerticalTimeline
 ```
 
 Fusion expects the add-in folder name to match the manifest location. Keep `VerticalTimeline.manifest` beside `VerticalTimeline.py`.

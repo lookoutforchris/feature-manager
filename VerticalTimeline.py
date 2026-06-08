@@ -58,12 +58,20 @@ manifest = featuremanagerlib.manifest.read()
 html_ready = False
 DEBUG_LOGGING = False
 ALLOWED_FEATURE_COMMANDS = {
+    'ConstructionPlaneOffsetFromPlaneCommand',
     'CreateSelectionGroupCmd',
     'ConfigureFeatureCmd',
-    'ConvertToDMDesignCommand',
+    'ConvertToDMFeatureCommand',
+    'Extrude',
     'FindInBrowser',
     'FindInWindow',
     'FusionDeleteCommand',
+    'LookAtCommand',
+    'ProfileSketchActivate',
+    'SelectSketchPlaneCommand',
+    'SketchExportToDXFCommand',
+    'SketchRedefineCommand',
+    'SliceSketchCommand',
 }
 
 timeline_item_count = 0
@@ -258,14 +266,21 @@ def get_optional_image_path(subpath):
 def get_menu_icon_paths():
     icon_resources = {
         'configure': 'Fusion/UI/FusionUI/Resources/Modeling/DesignConfiguration',
-        'convert-dm': 'Fusion/UI/FusionUI/Resources/solid/convertToDM',
+        'convert-dm': 'Fusion/UI/FusionUI/Resources/surface/extend',
         'create-group': 'Fusion/UI/FusionUI/Resources/Timeline/GroupFeature',
         'create-selection-set': 'Neutron/UI/Components/Resources/Icons/CreateSelectionSet',
         'delete': 'Fusion/UI/FusionUI/Resources/modify/delete',
+        'edit-profile-sketch': 'Fusion/UI/FusionUI/Resources/sketch/sketch_activate',
+        'edit-sketch': 'Fusion/UI/FusionUI/Resources/sketch/sketch_activate',
+        'export-dxf': 'Fusion/UI/FusionUI/Resources/File/ExportDXF',
+        'extrude': 'Fusion/UI/FusionUI/Resources/solid/extrude',
         'find-browser': 'Neutron/UI/Components/Resources/Icons/EntityFinder',
         'find-window': 'Neutron/UI/Commands/Resources/Camera/ZoomWindow',
+        'look-at': 'Neutron/UI/Commands/Resources/Camera/LookAt',
+        'offset-plane': 'Fusion/UI/FusionUI/Resources/construction/plane_offset',
+        'redefine-sketch-plane': 'Fusion/UI/FusionUI/Resources/sketch/sketch_create',
         'roll-marker': 'Fusion/UI/FusionUI/Resources/Timeline/RollBack',
-        'suppress': 'Fusion/UI/FusionUI/Resources/Assembly/SuppressJoint',
+        'slice-sketch': 'Fusion/UI/FusionUI/Resources/sketch/slice',
         'ungroup': 'Fusion/UI/FusionUI/Resources/Timeline/GroupFeature',
     }
     return {

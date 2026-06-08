@@ -1,6 +1,6 @@
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
-    [string]$InstallPath = "C:\Users\Chris\AppData\Roaming\Autodesk\Autodesk Fusion 360\API\AddIns\VerticalTimeline"
+    [string]$InstallPath = (Join-Path $env:APPDATA "Autodesk\Autodesk Fusion 360\API\AddIns\VerticalTimeline")
 )
 
 $ErrorActionPreference = "Stop"

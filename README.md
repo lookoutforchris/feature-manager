@@ -1,18 +1,33 @@
 # Feature Manager
 
-A Fusion add-in that adds a left-side feature manager for timeline features.
+Feature Manager is an Autodesk Fusion add-in that adds a left-side, floating
+feature/history manager for timeline features. It is a working fork of
+`original-author/VerticalTimeline`, evolving toward a SolidWorks-style feature
+tree while staying inside Fusion's API constraints.
 
 ![](screenshot.png)
 
-The functionality is still being tested against larger files, and performance needs to be improved for use with very large timelines.
+The current codebase is a release-candidate development build. Core interaction
+work is functional in local testing, but larger-file performance and some
+context-menu command behavior still need broader Fusion testing before a public
+release.
 
 ## Installation
 
-Download the add-in from the [Releases](https://github.com/original-author/VerticalTimeline/releases) page.
+No public release package has been published from this fork yet.
 
-Unpack it into `API\AddIns` (see [How to install an add-in or script in Fusion 360](https://knowledge.autodesk.com/support/fusion-360/troubleshooting/caas/sfdcarticles/sfdcarticles/How-to-install-an-ADD-IN-and-Script-in-Fusion-360.html)).
+For local development, copy or sync this add-in into Fusion's add-in folder:
 
-For now, keep the installed directory named `VerticalTimeline`, with no suffix. The visible add-in/palette name is **Feature Manager**.
+```text
+%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\VerticalTimeline
+```
+
+The installed directory is still named `VerticalTimeline` for compatibility
+with the current manifest and development setup. The visible add-in and palette
+name is **Feature Manager**.
+
+Fusion's general add-in installation flow is documented by Autodesk in
+**How to install an add-in or script in Fusion 360**.
 
 ## Usage
 
@@ -25,28 +40,55 @@ The palette is shown using *File* -> *View* -> *Toggle Feature Manager*.
 * Click on an item text to rename it.
 * Drag the blue history marker to roll the timeline.
 * Drag feature or group rows to reorder them where Fusion allows.
-* Right-click items for Feature Manager context commands such as Edit Feature, Delete, Rename, Roll Timeline Marker Here, Suppress/Unsuppress Features, Find in Browser, Create Group, and Ungroup.
+* Right-click items for context-aware Feature Manager commands.
 * Groups can be expanded/collapsed with the disclosure arrow.
+
+Feature context menus currently include Fusion timeline-style commands such as
+Create Selection Set, Edit Feature, Edit Profile Sketch where applicable,
+Configure, Delete, Rename, Roll Timeline Marker Here, Convert to DM Feature,
+Suppress/Unsuppress Features, Find in Browser, and Find in Window.
+
+Sketch context menus include sketch-oriented commands such as Edit Sketch,
+Extrude, Offset Plane, Redefine Sketch Plane, Select Sketch Plane, Slice Sketch,
+Export DXF, Look At, Delete, Rename, and Find in Window.
+
+Multi-selection supports contiguous feature grouping. Non-contiguous grouping is
+intentionally rejected because Fusion timeline groups require contiguous items.
 
 The add-in can be temporarily disabled using the *Scripts and Add-ins* dialog. Press *Shift+S* in Fusion 360™ and go to the *Add-Ins* tab.
 
-## TODO
+## Release-Candidate TODO
 
-* Improve performance
+Before publishing a public GitHub release:
 
-* Fix nested coloring not reused in new documents.
+* Run the manual regression checklist against the installed add-in.
+* Verify sketch context-menu commands from Feature Manager selection context.
+* Verify Edit Profile Sketch behavior across more feature types.
+* Verify group create, rename, collapse, drag/reorder, and ungroup after add-in restart.
+* Test timeline population and interaction on larger parametric models.
+* Measure refresh performance for larger timelines.
+* Package a clean release archive without local development-only files.
 
-* Highlight feature selected in the Fusion GUI.
+Known longer-term limitations and cleanup:
 
-* Less intrusive error messages.
+* Primitive feature selection/edit behavior still needs more testing, especially
+  `BoxFeature`, `CylinderFeature`, and similar feature objects inside components.
+* Feature icon and command mappings depend on Fusion resource paths and command
+  IDs that may vary by Fusion version.
+* Some Fusion timeline entities remain inaccessible through the public API, so
+  exact native timeline parity may not be possible for every feature type.
+* Error reporting should become less intrusive than modal message boxes.
 
-* Correctly select and edit primitive features (e.g. *Box*) that are inside components.
+## Fusion API Notes
 
-* Fix broken functionality once Fusion fixes its bugs
+The add-in still works around known Fusion API limitations:
 
-  * Cannot show all feature images due to bug: [[API BUG] Cannot access entity of "Move" feature](https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-cannot-access-entity-of-quot-move-quot-feature/m-p/9651921)
-
-  * Workaround for document switching since documentActivated is broken. [[API BUG] Application.documentActivated Event do not raise](https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-application-documentactivated-event-do-not-raise/m-p/9020750)
+* Some feature entities cannot be accessed through the API, including cases
+  related to this reported issue: [[API BUG] Cannot access entity of "Move"
+  feature](https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-cannot-access-entity-of-quot-move-quot-feature/m-p/9651921)
+* Document/workspace transition handling remains defensive because of historical
+  `documentActivated` reliability issues: [[API BUG] Application.documentActivated
+  Event do not raise](https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-application-documentactivated-event-do-not-raise/m-p/9020750)
 
 ## Changelog
 

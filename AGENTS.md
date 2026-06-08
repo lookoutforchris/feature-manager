@@ -8,8 +8,8 @@ Do not start with a rewrite. Stabilize the existing add-in first, document curre
 
 ## Environment
 
-- Workspace: `C:\dev\projects\feature-manager`
-- Installed Fusion add-in: `C:\Users\Chris\AppData\Roaming\Autodesk\Autodesk Fusion 360\API\AddIns\VerticalTimeline`
+- Workspace: local project checkout
+- Installed Fusion add-in: `%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\VerticalTimeline`
 - Fusion MCP endpoint: `http://127.0.0.1:27182/mcp`
 - Local editor: VS Code
 - Shell: PowerShell on Windows

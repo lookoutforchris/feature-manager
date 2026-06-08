@@ -116,10 +116,10 @@ SPDX-License-Identifier: MIT
                 text-align: center;
             }
             .context-menu-icon img {
-                height: 20px;
-                max-width: 20px;
+                height: 16px;
+                max-width: 16px;
                 vertical-align: middle;
-                width: 20px;
+                width: 16px;
             }
             .context-menu-shortcut {
                 padding-left: 24px;
@@ -236,6 +236,7 @@ SPDX-License-Identifier: MIT
             }
             .feature-group-header .icon {
                 cursor: pointer;
+                filter: brightness(0) saturate(100%) invert(69%) sepia(67%) saturate(896%) hue-rotate(165deg) brightness(96%) contrast(88%);
             }
             .name {
                 margin-left: 5px;
@@ -248,6 +249,7 @@ SPDX-License-Identifier: MIT
             .name:focus {
                 background-color: white;
                 color: #111111;
+                outline: none;
             }
             .suppressed .feature-label {
                 opacity: 0.5;
@@ -654,6 +656,12 @@ SPDX-License-Identifier: MIT
     }
 
     function onFeatureContextMenu(e) {
+        if (isContextMenuVisible()) {
+            hideContextMenu();
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+        }
         let item = e.target.closest('.feature');
         if (!item) {
             hideContextMenu();
@@ -667,6 +675,7 @@ SPDX-License-Identifier: MIT
         }
         showFeatureContextMenu(e, item);
         e.preventDefault();
+        e.stopPropagation();
         return false;
     }
 
@@ -682,8 +691,10 @@ SPDX-License-Identifier: MIT
             addMultiFeatureContextMenuItems(menu, selectedCount);
         } else if (item.getAttribute('data-type') == 'GROUP') {
             addGroupContextMenuItems(menu, item);
+        } else if (isSketchItem(item)) {
+            addSketchContextMenuItems(menu);
         } else {
-            addFeatureContextMenuItems(menu);
+            addFeatureContextMenuItems(menu, item);
         }
 
         menu.classList.add('visible');
@@ -700,21 +711,44 @@ SPDX-License-Identifier: MIT
         menu.style.top = `${Math.max(0, y)}px`;
     }
 
-    function addFeatureContextMenuItems(menu) {
+    function addFeatureContextMenuItems(menu, item) {
         let suppressInfo = getSuppressionMenuInfo();
+        let canEditProfileSketch = featureSupportsProfileSketch(item);
         addContextMenuItem(menu, menuIcon('create-selection-set'), 'Create Selection Set', () => executeFusionFeatureCommand('CreateSelectionGroupCmd'));
         addContextMenuSeparator(menu);
         addContextMenuItem(menu, getContextFeatureIcon(), 'Edit Feature', editContextFeature);
+        addContextMenuItem(menu, menuIcon('edit-profile-sketch'), 'Edit Profile Sketch', () => executeFusionFeatureCommand('ProfileSketchActivate'), '', !canEditProfileSketch);
         addContextMenuItem(menu, menuIcon('configure'), 'Configure', () => executeFusionFeatureCommand('ConfigureFeatureCmd'));
         addContextMenuSeparator(menu);
         addContextMenuItem(menu, menuIcon('delete'), 'Delete', () => executeFusionFeatureCommand('FusionDeleteCommand'), 'Del');
         addContextMenuItem(menu, '', 'Rename', renameContextFeature);
         addContextMenuSeparator(menu);
         addContextMenuItem(menu, menuIcon('roll-marker'), 'Roll Timeline Marker Here', rollContextFeature);
-        addContextMenuItem(menu, menuIcon('convert-dm'), 'Convert to DM Feature', () => executeFusionFeatureCommand('ConvertToDMDesignCommand'));
-        addContextMenuItem(menu, menuIcon('suppress'), suppressInfo.label, () => setContextFeaturesSuppressed(suppressInfo.suppressed));
+        addContextMenuItem(menu, menuIcon('convert-dm'), 'Convert to DM Feature', () => executeFusionFeatureCommand('ConvertToDMFeatureCommand'));
+        addContextMenuItem(menu, '', suppressInfo.label, () => setContextFeaturesSuppressed(suppressInfo.suppressed));
         addContextMenuSeparator(menu);
         addContextMenuItem(menu, menuIcon('find-browser'), 'Find in Browser', () => executeFusionFeatureCommand('FindInBrowser'));
+        addContextMenuItem(menu, menuIcon('find-window'), 'Find in Window', () => executeFusionFeatureCommand('FindInWindow'));
+    }
+
+    function addSketchContextMenuItems(menu) {
+        addContextMenuItem(menu, menuIcon('create-selection-set'), 'Create Selection Set', () => executeFusionFeatureCommand('CreateSelectionGroupCmd'));
+        addContextMenuSeparator(menu);
+        addContextMenuItem(menu, menuIcon('extrude'), 'Extrude', () => executeFusionFeatureCommand('Extrude'), 'E');
+        addContextMenuItem(menu, menuIcon('offset-plane'), 'Offset Plane', () => executeFusionFeatureCommand('ConstructionPlaneOffsetFromPlaneCommand'));
+        addContextMenuSeparator(menu);
+        addContextMenuItem(menu, menuIcon('edit-sketch'), 'Edit Sketch', editContextFeature);
+        addContextMenuItem(menu, menuIcon('redefine-sketch-plane'), 'Redefine Sketch Plane', () => executeFusionFeatureCommand('SketchRedefineCommand'));
+        addContextMenuItem(menu, '', 'Select Sketch Plane', () => executeFusionFeatureCommand('SelectSketchPlaneCommand'));
+        addContextMenuItem(menu, menuIcon('slice-sketch'), 'Slice Sketch', () => executeFusionFeatureCommand('SliceSketchCommand'));
+        addContextMenuItem(menu, menuIcon('configure'), 'Configure', () => executeFusionFeatureCommand('ConfigureFeatureCmd'));
+        addContextMenuSeparator(menu);
+        addContextMenuItem(menu, menuIcon('export-dxf'), 'Export DXF', () => executeFusionFeatureCommand('SketchExportToDXFCommand'));
+        addContextMenuItem(menu, menuIcon('delete'), 'Delete', () => executeFusionFeatureCommand('FusionDeleteCommand'), 'Del');
+        addContextMenuItem(menu, '', 'Rename', renameContextFeature);
+        addContextMenuSeparator(menu);
+        addContextMenuItem(menu, menuIcon('look-at'), 'Look At', () => executeFusionFeatureCommand('LookAtCommand'));
+        addContextMenuSeparator(menu);
         addContextMenuItem(menu, menuIcon('find-window'), 'Find in Window', () => executeFusionFeatureCommand('FindInWindow'));
     }
 
@@ -738,8 +772,8 @@ SPDX-License-Identifier: MIT
         addContextMenuItem(menu, '', 'Rename', renameContextFeature);
         addContextMenuSeparator(menu);
         addContextMenuItem(menu, menuIcon('roll-marker'), 'Roll Timeline Marker Here', rollContextFeature);
-        addContextMenuItem(menu, menuIcon('convert-dm'), 'Convert to DM Feature', () => executeFusionFeatureCommand('ConvertToDMDesignCommand'), '', anyGroups);
-        addContextMenuItem(menu, menuIcon('suppress'), suppressInfo.label, () => setContextFeaturesSuppressed(suppressInfo.suppressed), '', allGroups);
+        addContextMenuItem(menu, menuIcon('convert-dm'), 'Convert to DM Feature', () => executeFusionFeatureCommand('ConvertToDMFeatureCommand'), '', anyGroups);
+        addContextMenuItem(menu, '', suppressInfo.label, () => setContextFeaturesSuppressed(suppressInfo.suppressed), '', allGroups);
     }
 
     function addGroupContextMenuItems(menu, item) {
@@ -802,6 +836,10 @@ SPDX-License-Identifier: MIT
         contextMenuFeature = null;
     }
 
+    function isContextMenuVisible() {
+        return document.getElementById('context-menu').classList.contains('visible');
+    }
+
     function getContextFeatureId() {
         return parseInt(contextMenuFeature.getAttribute('data-id'));
     }
@@ -829,6 +867,24 @@ SPDX-License-Identifier: MIT
 
     function menuIcon(name) {
         return menuIcons[name] || '';
+    }
+
+    function isSketchItem(item) {
+        return item.getAttribute('data-type') == 'Sketch';
+    }
+
+    function featureSupportsProfileSketch(item) {
+        let profileFeatureTypes = new Set([
+            'EmbossFeature',
+            'ExtrudeFeature',
+            'HoleFeature',
+            'LoftFeature',
+            'RevolveFeature',
+            'RibFeature',
+            'SweepFeature',
+            'WebFeature'
+        ]);
+        return profileFeatureTypes.has(item.getAttribute('data-type'));
     }
 
     function getSuppressionMenuInfo() {
@@ -1194,6 +1250,11 @@ SPDX-License-Identifier: MIT
     }
 
     document.addEventListener('click', hideContextMenu);
+    document.addEventListener('contextmenu', (e) => {
+        if (!e.target.closest('.feature') && !e.target.closest('.context-menu')) {
+            hideContextMenu();
+        }
+    });
     document.addEventListener('keydown', (e) => {
         if (e.key == 'Escape') {
             hideContextMenu();
@@ -1203,6 +1264,7 @@ SPDX-License-Identifier: MIT
         }
     });
     window.addEventListener('blur', () => {
+        hideContextMenu();
         if (pendingFeatureDrag || draggedFeatureId !== null) {
             finishFeatureDrag();
         }
