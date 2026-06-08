@@ -707,9 +707,9 @@ def show_palette():
         html_ready = False
         debug_log('creating palette')
 
-        palette = ui.palettes.add('featureManager_verticalTimelinePalette', 'FEATURE MANAGER',
+        palette = ui.palettes.addTransparent('featureManager_verticalTimelinePalette', 'FEATURE MANAGER',
                                     'palette.html',
-                                    True, False, True, PALETTE_DEFAULT_WIDTH, PALETTE_DEFAULT_HEIGHT, False)
+                                    True, False, True, False, PALETTE_DEFAULT_WIDTH, PALETTE_DEFAULT_HEIGHT)
         palette.setMinimumSize(PALETTE_MIN_WIDTH, PALETTE_MIN_HEIGHT)
         palette.dockingState = adsk.core.PaletteDockingStates.PaletteDockStateLeft
 
