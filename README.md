@@ -59,7 +59,8 @@ The add-in can be temporarily disabled using the *Scripts and Add-ins* dialog. P
 
 ## Release-Candidate TODO
 
-Before publishing a public GitHub release:
+Feature Manager is currently preparing its first public release as `v1.0.0`.
+Before publishing:
 
 * Run the manual regression checklist against the installed add-in.
 * Verify sketch context-menu commands from Feature Manager selection context.
@@ -90,13 +91,25 @@ The add-in still works around known Fusion API limitations:
   `documentActivated` reliability issues: [[API BUG] Application.documentActivated
   Event do not raise](https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-application-documentactivated-event-do-not-raise/m-p/9020750)
 
+## Version
+
+Current add-in version: `1.0.0`.
+
+This is Feature Manager's first independent version line. It is intentionally
+not based on the original VerticalTimeline version numbers.
+
 ## Changelog
 
-* v 0.2.1
-  * Enable *Run on Startup* by default.
-* v 0.2.0
-  * Fix selection of features inside components/occurrences.
-  * Allow selection of rolled back and suppressed features.
+* v1.0.0
+  * Rebranded the visible add-in and palette as Feature Manager.
+  * Added a transparent, floating Browser-style feature tree.
+  * Added draggable vertical history marker support.
+  * Added feature and group drag-reorder support where Fusion allows it.
+  * Added built-in timeline group creation, rename, collapse, reorder, and ungroup workflows.
+  * Added multi-selection with contiguous grouping rules.
+  * Added context-aware right-click menus for features, sketches, groups, and multi-selection.
+  * Added native Fusion resource icons and native-size menu icon rendering.
+  * Added release-candidate documentation, development notes, and packaging guidance.
 
 ## License
 
