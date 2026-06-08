@@ -1,6 +1,6 @@
-# VerticalTimeline
+# Feature Manager
 
-A Fusion 360 add-in that adds a vertical timeline.
+A Fusion add-in that adds a left-side feature manager for timeline features.
 
 ![](screenshot.png)
 
@@ -12,11 +12,11 @@ Download the add-in from the [Releases](https://github.com/original-author/Verti
 
 Unpack it into `API\AddIns` (see [How to install an add-in or script in Fusion 360](https://knowledge.autodesk.com/support/fusion-360/troubleshooting/caas/sfdcarticles/sfdcarticles/How-to-install-an-ADD-IN-and-Script-in-Fusion-360.html)).
 
-Make sure the directory is named `VerticalTimeline`, with no suffix.
+For now, keep the installed directory named `VerticalTimeline`, with no suffix. The visible add-in/palette name is **Feature Manager**.
 
 ## Usage
 
-The timeline is shown using *File* -> *View* -> *Toggle Vertical Timeline*.
+The palette is shown using *File* -> *View* -> *Toggle Feature Manager*.
 
 * Click an item to select it*.
 * Double-click on an item to edit it*.
@@ -56,5 +56,5 @@ The add-in can be temporarily disabled using the *Scripts and Add-ins* dialog. P
 ## License
 
 This fork is distributed under the MIT License. The original VerticalTimeline
-files were made available under `GPL-3.0-or-later OR MIT`; this project elects
-the MIT option and retains the required upstream copyright notices.
+files were made available under `GPL-3.0-or-later OR MIT`; Feature Manager
+elects the MIT option and retains the required upstream copyright notices.

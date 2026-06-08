@@ -2,7 +2,7 @@
 
 ## Goal
 
-Evaluate whether Fusion's native Browser palette can be stacked above the Vertical Timeline palette, approximating a SolidWorks-style FeatureManager area where model/browser structure is above feature history.
+Evaluate whether Fusion's native Browser palette can be stacked above the Feature Manager palette, approximating a SolidWorks-style Feature Manager area where model/browser structure is above feature history.
 
 ## Current Live Palette Findings
 
@@ -15,15 +15,15 @@ Fusion exposes both palettes through `ui.palettes`:
   - `isVisible`: `True`
   - observed `dockingState`: left
   - observed `dockingOption`: vertical-only
-- Vertical Timeline palette:
+- Feature Manager palette:
   - `id`: `featureManager_verticalTimelinePalette`
-  - `name`: `Vertical Timeline v0.2.1`
+  - `name`: `FEATURE MANAGER`
   - `isNative`: `False`
   - `isVisible`: `True`
   - observed `dockingState`: left
   - observed `dockingOption`: vertical-and-horizontal
 
-Fusion's `Palette` API exposes `snapTo`, and `PaletteSnapOptions` includes `PaletteSnapOptionsBottom`, so a Browser-above / Vertical-Timeline-below arrangement may be possible without recreating the Browser.
+Fusion's `Palette` API exposes `snapTo`, and `PaletteSnapOptions` includes `PaletteSnapOptionsBottom`, so a Browser-above / Feature-Manager-below arrangement may be possible without recreating the Browser.
 
 ## Preferred Direction
 
@@ -39,18 +39,18 @@ Reasons:
 
 Do this only as an explicit layout experiment, not as an automatic startup behavior yet.
 
-1. Record current Browser and Vertical Timeline geometry:
+1. Record current Browser and Feature Manager geometry:
    - `dockingState`
    - `width`
    - `height`
    - `left`
    - `top`
-2. Try snapping Vertical Timeline below Browser:
+2. Try snapping Feature Manager below Browser:
    - `vertical_palette.snapTo(browser_palette, PaletteSnapOptionsBottom)`
 3. Observe:
    - Does Fusion stack palettes vertically on the left?
    - Does the Browser retain its native collapse/expand behavior?
-   - Does Vertical Timeline stay below Browser after command completion?
+   - Does Feature Manager stay below Browser after command completion?
    - Does Fusion remember the layout after restart?
 4. If snap does not work while docked, test only with explicit approval:
    - floating both palettes
@@ -64,7 +64,7 @@ Do this only as an explicit layout experiment, not as an automatic startup behav
 - Automatic rearrangement may frustrate users who prefer their existing Fusion layout.
 - Moving native palettes from an add-in can feel invasive unless it is opt-in.
 
-## Browser Nested Inside Vertical Timeline
+## Browser Nested Inside Feature Manager
 
 This is conceptually attractive because SolidWorks presents the model tree and feature history as one integrated manager area.
 
@@ -84,13 +84,13 @@ If we want a unified tree later, the better long-term design is a FeatureManager
 Short term:
 
 - Test `snapTo(Browser, Bottom)` manually/experimentally.
-- If reliable, add an optional command or setting: `Stack Vertical Timeline Below Browser`.
+- If reliable, add an optional command or setting: `Stack Feature Manager Below Browser`.
 
 Medium term:
 
 - Keep the Browser native.
-- Improve Vertical Timeline group/folder behavior until it feels like Fusion's Browser.
+- Improve Feature Manager group/folder behavior until it feels like Fusion's Browser.
 
 Long term:
 
-- Consider a unified FeatureManager-style tree only after requirements are clear, and treat it as a purpose-built replacement rather than embedding Fusion's Browser.
+- Consider a unified Feature Manager-style tree only after requirements are clear, and treat it as a purpose-built replacement rather than embedding Fusion's Browser.

@@ -4,7 +4,7 @@
 	"id":	"deb13d13-5990-47c2-af83-91b9c0c10986",
 	"author":	"Skyrocket Research",
 	"description":	{
-		"":	"Provides a vertical timeline."
+		"":	"Provides a feature manager."
 	},
 	"version":	"0.2.1",
 	"runOnStartup":	true,

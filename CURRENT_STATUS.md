@@ -4,6 +4,8 @@
 
 This repository is a direct clone of `original-author/VerticalTimeline` with the `featuremanagerlib` submodule present. The initial stabilization change is intentionally small and keeps the existing UI and event model intact.
 
+Pre-group-management restore point: git commit `eeb5eee` (`Milestone: Feature Manager core interactions`).
+
 ## What Was Fixed
 
 `ui.activeWorkspace` is no longer read directly from document activation, workspace activation, or the toggle command. A new defensive helper treats Fusion transition-time `RuntimeError` failures as "no valid active workspace yet" and logs the condition instead of letting the add-in crash.
@@ -35,7 +37,7 @@ Runtime checks completed:
 - `fusion_mcp_read` listed the active Fusion document `Test v2`.
 - `fusion_mcp_execute` ran a read-only script inside Fusion.
 - Fusion reported version `2703.1.11`.
-- The installed add-in emitted `Vertical Timeline:` diagnostic output.
+- The installed add-in emitted `Feature Manager:` diagnostic output.
 - The defensive `ui.activeWorkspace` guard logged transition-time `InternalValidationError : pActiveEnvironment` instead of crashing.
 - The palette refreshed and sent timeline updates for a four-feature test document.
 - Read-only Fusion MCP timeline inspection of `Test v2` returned four accessible timeline entities: `Sketch`, `ExtrudeFeature`, `FilletFeature`, and `ShellFeature`.
@@ -46,7 +48,7 @@ Runtime checks completed:
 - Added initial vertical history marker support. Fusion MCP verified that `Design.timeline.markerPosition` is readable and writable. The palette now renders the marker position and sends `setMarkerPosition` events back to Python.
 - Reworked the marker interaction from browser-native HTML drag/drop to mouse-based dragging with document-level move/up handling, nearest-slot hit testing, and temporary `user-select: none` styling to reduce accidental feature-row selection while dragging.
 - Fixed a direct-drag marker repaint issue where Fusion updated the native horizontal timeline and model state, but the vertical marker could remain at its old displayed position. The Python handler now returns the requested marker position after a successful set, and the HTML moves the marker optimistically after a successful `setMarkerPosition` call.
-- Replaced the old right-click-to-roll-back behavior with a vertical timeline context menu. Active first-pass actions are Create Selection Set, Edit Feature, Delete, Rename, and Roll Timeline Marker Here. Other native timeline menu entries are displayed but disabled until their Fusion command behavior is mapped and tested from the palette context.
+- Replaced the old right-click-to-roll-back behavior with a Feature Manager context menu. Active first-pass actions are Create Selection Set, Edit Feature, Delete, Rename, and Roll Timeline Marker Here. Other native timeline menu entries are displayed but disabled until their Fusion command behavior is mapped and tested from the palette context.
 - Set the palette default/minimum width to 435 px. The context menu now has a fixed 300 px width and opens at a constant 125 px left offset with a persistent highlight on the source row, so placement no longer varies by feature-name length.
 - Fixed a grouped timeline crash where `TimelineObject.index` could throw `InternalValidationError : res >= 0` during palette refresh. Marker positions are now derived from the add-in's flattened timeline order and stored on internal tree nodes instead of reading `obj.index` during render.
 - Added first-pass group/folder behavior: group rows carry collapsed state from Fusion, the group disclosure control calls Fusion's `isCollapsed` setter, and group right-click menus are context-aware with Rename Group, Expand/Collapse Group, and Roll Timeline Marker Here active. Move up/down, drag into group, and delete/ungroup are still disabled until their mutation semantics are tested.
@@ -54,6 +56,9 @@ Runtime checks completed:
 - Increased timeline icon render size to 20 px to better match Fusion's Browser palette. Added final-marker de-duplication for the case where the last timeline position is also the end of the last group.
 - Changed group disclosure from plus/minus text to larger Browser-style right/down chevrons, and made both the chevron and folder icon toggle group expand/collapse.
 - Group disclosure now uses Fusion's existing `10x10-ArrowDown.png` and `10x10-ArrowRight.png` assets, and collapse/expand updates locally immediately before attempting to sync Fusion's group collapsed state. Project rule added: prefer Fusion-native assets and styling whenever possible.
+- Added built-in timeline group management so the add-in no longer needs Timeline Manager for the core folder workflow. Multi-select right-click now exposes Group Selected Features and Ungroup Selected Groups. Group right-click now exposes Rename Group, Expand/Collapse Group, Roll Timeline Marker Here, and Ungroup. Grouping is intentionally limited to two or more contiguous, non-group, top-level timeline items; non-contiguous selections show an error dialog. Ungroup uses Fusion's `TimelineGroup.deleteMe(False)` to remove only the group while keeping its contents.
+- Group drag/reorder now collapses an expanded group before calling Fusion reorder APIs, matching the documented Fusion limitation that expanded groups cannot be reordered directly.
+- Reworked the Feature Manager right-click menus toward native Fusion timeline parity. Menu labels now use Fusion terminology, icon slots use Fusion resource images where available, and the implemented command path covers Create Selection Set, Edit Feature, Configure, Delete, Rename, Roll Timeline Marker Here, Convert to DM Feature, Suppress/Unsuppress Features, Find in Browser, Find in Window, Create Group, and Ungroup. Fusion MCP confirmed the native command IDs used by the menu are present in the running Fusion session.
 
 The workspace copy and installed add-in copy both have the defensive `ui.activeWorkspace` crash fix.
 
@@ -65,9 +70,10 @@ The following behaviors still need focused testing:
 - Group display and collapse state.
 - Primitive feature selection/edit behavior, especially `BoxFeature`, `CylinderFeature`, and similar feature objects inside components.
 - Manual drag testing for the new vertical history marker after add-in stop/start, including confirming that the vertical marker, native horizontal marker, and model rollback state stay synchronized.
-- Manual testing for the vertical timeline context menu, especially Delete and Create Selection Set, because these execute Fusion commands after selecting the feature from the palette.
-- Manual testing for Fusion timeline groups after add-in restart: palette refresh with grouped items, group rename, group expand/collapse, and group-specific right-click menu.
-- Research Browser/Vertical Timeline stacking before implementation. Notes are in `PALETTE_LAYOUT_RESEARCH.md`.
+- Manual testing for the Feature Manager context menu, especially Delete and Create Selection Set, because these execute Fusion commands after selecting the feature from the palette.
+- Manual testing for built-in Fusion timeline group actions after add-in restart: create contiguous group, reject non-contiguous group, group rename, group expand/collapse, group drag/reorder, and ungroup while keeping contents.
+- Manual testing for right-click context-menu parity: single feature, multi-feature, and group menus; command execution for Configure, Convert to DM Feature, Suppress/Unsuppress, Find in Browser, and Find in Window; icon appearance versus the native horizontal timeline.
+- Research Browser/Feature Manager stacking before implementation. Notes are in `PALETTE_LAYOUT_RESEARCH.md`.
 - Timeline population across several parametric models.
 - Performance on larger timelines.
 

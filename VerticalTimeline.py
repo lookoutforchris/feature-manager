@@ -1,7 +1,7 @@
-#Description-Provides a vertical timeline.
+#Description-Provides a feature manager.
 
-# This file is part of VerticalTimeline, a Fusion 360 add-in that
-# provides a vertical timeline.
+# This file is part of Feature Manager, a Fusion add-in that
+# provides a feature manager.
 #
 # Copyright (C) 2020  Thomas Axelsson
 #
@@ -21,7 +21,7 @@ import os
 import sys
 import threading
 
-NAME = 'Vertical Timeline'
+NAME = 'Feature Manager'
 FILE_DIR = os.path.dirname(os.path.realpath(__file__))
 PALETTE_ID = 'featureManager_verticalTimelinePalette'
 COMMAND_ID = 'featureManager_showVerticalTimeline'
@@ -59,6 +59,10 @@ html_ready = False
 DEBUG_LOGGING = False
 ALLOWED_FEATURE_COMMANDS = {
     'CreateSelectionGroupCmd',
+    'ConfigureFeatureCmd',
+    'ConvertToDMDesignCommand',
+    'FindInBrowser',
+    'FindInWindow',
     'FusionDeleteCommand',
 }
 
@@ -247,6 +251,28 @@ def get_fusion_resource_file(subpath):
         print(f'File does not exist: {path}')
         return None
 
+def get_optional_image_path(subpath):
+    path = f'{featuremanagerlib.utils.get_fusion_deploy_folder()}/{subpath}/16x16.png'
+    return path if os.path.exists(path) else None
+
+def get_menu_icon_paths():
+    icon_resources = {
+        'configure': 'Fusion/UI/FusionUI/Resources/Modeling/DesignConfiguration',
+        'convert-dm': 'Fusion/UI/FusionUI/Resources/solid/convertToDM',
+        'create-group': 'Fusion/UI/FusionUI/Resources/Timeline/GroupFeature',
+        'create-selection-set': 'Neutron/UI/Components/Resources/Icons/CreateSelectionSet',
+        'delete': 'Fusion/UI/FusionUI/Resources/modify/delete',
+        'find-browser': 'Neutron/UI/Components/Resources/Icons/EntityFinder',
+        'find-window': 'Neutron/UI/Commands/Resources/Camera/ZoomWindow',
+        'roll-marker': 'Fusion/UI/FusionUI/Resources/Timeline/RollBack',
+        'suppress': 'Fusion/UI/FusionUI/Resources/Assembly/SuppressJoint',
+        'ungroup': 'Fusion/UI/FusionUI/Resources/Timeline/GroupFeature',
+    }
+    return {
+        name: get_optional_image_path(resource)
+        for name, resource in icon_resources.items()
+    }
+
 def find_commands(substring):
     return [c.id for c in ui.commandDefinitions if substring in c.id.lower()]
 
@@ -278,18 +304,26 @@ def invalidate(send=True, clear=False, force=False):
     message = ""
     features = []
     max_parents = 0
+    visual_timeline_item_count = timeline_item_count
+    visual_marker_position = timeline_marker_position
     if not clear:
         timeline_status, timeline = featuremanagerlib.timeline.get_timeline()
         if timeline_status == TIMELINE_STATUS_OK:
             timeline_item_count = timeline.count
             timeline_marker_position = timeline.markerPosition
+            visual_timeline_item_count = get_visual_marker_position(timeline, timeline.count)
+            visual_marker_position = get_visual_marker_position(timeline, timeline_marker_position)
             features, max_parents = get_features(timeline)
         elif timeline_status == TIMELINE_STATUS_PRODUCT_NOT_READY:
             timeline_item_count = -1
             timeline_marker_position = -1
+            visual_timeline_item_count = -1
+            visual_marker_position = -1
         elif timeline_status == TIMELINE_STATUS_NOT_PARAMETRIC:
             timeline_item_count = -1
             timeline_marker_position = -1
+            visual_timeline_item_count = -1
+            visual_marker_position = -1
             message = "Design is not parametric"
         else:
             print("Unhandled timeline status:", timeline_status)
@@ -298,9 +332,10 @@ def invalidate(send=True, clear=False, force=False):
     data = {
          'features': features,
          'max-parents': max_parents,
+         'menu-icons': get_menu_icon_paths(),
          'message': message,
-         'marker-position': timeline_marker_position,
-         'timeline-count': timeline_item_count,
+         'marker-position': visual_marker_position,
+         'timeline-count': visual_timeline_item_count,
     }
 
     if not send:
@@ -322,6 +357,34 @@ class TimelineObjectNode:
 
 timeline_cache_tree = None
 timeline_cache_map = None
+def get_visual_marker_position(timeline, native_marker_position):
+    visual_position = 0
+    marker_position = max(0, min(native_marker_position, timeline.count))
+
+    for native_position, obj in enumerate(timeline):
+        if native_position >= marker_position:
+            break
+        if obj.isGroup:
+            visual_position += obj.count
+        else:
+            visual_position += 1
+
+    return visual_position
+
+def get_native_marker_position(timeline, visual_marker_position):
+    visual_position = 0
+    target_position = max(0, visual_marker_position)
+
+    for native_position, obj in enumerate(timeline):
+        item_visual_width = obj.count if obj.isGroup else 1
+        if target_position <= visual_position:
+            return native_position
+        if target_position <= visual_position + item_visual_width:
+            return native_position + 1
+        visual_position += item_visual_width
+
+    return timeline.count
+
 def get_features(timeline):
     global timeline_cache_tree, timeline_cache_map
     flat_timeline = featuremanagerlib.timeline.flatten_timeline(timeline)
@@ -417,7 +480,7 @@ def get_feature_parent_path(component_parent_map, obj, feature=None):
             return []
     elif not hasattr(feature, 'parentComponent'):
         if feature_type not in [ 'Snapshot' ]:
-            print("Vertical Timeline: Unhandled missing parent for " + feature.classType())
+            print("Feature Manager: Unhandled missing parent for " + feature.classType())
         return []
     elif feature.parentComponent == design.rootComponent:
         return []
@@ -549,9 +612,9 @@ def run(context):
         if not toggle_palette_cmd_def:
             toggle_palette_cmd_def = ui.commandDefinitions.addButtonDefinition(
                 'featureManager_showVerticalTimeline',
-                'Toggle Vertical Timeline',
-                'Vertical Timeline\n\n' +
-                'A vertical timeline, that shows feature names. Timeline functionality is limited.',
+                'Toggle Feature Manager',
+                'Feature Manager\n\n' +
+                'A vertical feature manager for Fusion timeline features.',
                 './resources/verticaltimeline')
 
             events_manager.add_handler(toggle_palette_cmd_def.commandCreated,
@@ -631,7 +694,7 @@ def toggle_palette_command_execute_handler(args):
         if get_active_workspace_id() == 'FusionSolidEnvironment':
             show_palette()
         else:
-            ui.messageBox('Vertical Timeline cannot be shown in this workspace. ' +
+            ui.messageBox('Feature Manager cannot be shown in this workspace. ' +
                         'It will be shown when you open a Design.')
     else:
         hide_palette()
@@ -644,7 +707,7 @@ def show_palette():
         html_ready = False
         debug_log('creating palette')
 
-        palette = ui.palettes.add('featureManager_verticalTimelinePalette', f'Vertical Timeline v{manifest["version"]}',
+        palette = ui.palettes.add('featureManager_verticalTimelinePalette', 'FEATURE MANAGER',
                                     'palette.html',
                                     True, False, True, PALETTE_DEFAULT_WIDTH, PALETTE_DEFAULT_HEIGHT, False)
         palette.setMinimumSize(PALETTE_MIN_WIDTH, PALETTE_MIN_HEIGHT)
@@ -778,6 +841,11 @@ def timeline_object_is_at_reorder_target(obj, before_index, timeline):
         return current_index == timeline.count - 1
     return current_index == before_index or current_index == before_index - 1
 
+def marker_position_is_inside_node_span(node, before_position):
+    if node.marker_position is None or node.marker_after_position is None:
+        return False
+    return node.marker_position <= before_position <= node.marker_after_position
+
 def reorder_timeline_object_to_end(obj, timeline):
     current_index = get_timeline_object_index(obj)
     if current_index is None:
@@ -799,6 +867,92 @@ def reorder_timeline_object_to_end(obj, timeline):
             return False, str(reorder_error)
 
     return timeline_object_is_at_reorder_target(obj, timeline.count, timeline), None
+
+def get_timeline_nodes(feature_ids):
+    nodes = []
+    if timeline_cache_map is None:
+        return None, 'Timeline cache is not ready.'
+
+    for feature_id in feature_ids:
+        node = timeline_cache_map.get(feature_id)
+        if node is None:
+            return None, f'Timeline item is no longer available: {feature_id}'
+        nodes.append(node)
+
+    return nodes, None
+
+def group_timeline_nodes(feature_ids, timeline):
+    nodes, error_message = get_timeline_nodes(feature_ids)
+    if error_message:
+        return False, error_message
+    if len(nodes) < 2:
+        return False, 'Select two or more contiguous timeline items to create a group.'
+    if any(node.obj.isGroup for node in nodes):
+        return False, 'Cannot group an existing group. Ungroup it first.'
+    if any(node.obj.parentGroup for node in nodes):
+        return False, 'Cannot group items that are already inside a group. Ungroup them first.'
+
+    raw_positions = [node.marker_position for node in nodes]
+    if any(position is None for position in raw_positions):
+        return False, 'Could not read timeline positions for the selected items.'
+    positions = sorted(raw_positions)
+
+    start_position = positions[0]
+    end_position = positions[-1]
+    expected_positions = list(range(start_position, end_position + 1))
+    if positions != expected_positions:
+        return False, 'Only contiguous timeline items can be grouped.'
+
+    try:
+        new_group = timeline.timelineGroups.add(start_position, end_position)
+    except Exception as group_error:
+        return False, str(group_error)
+
+    if not new_group:
+        return False, 'Fusion did not create a timeline group.'
+
+    return True, None
+
+def ungroup_timeline_nodes(feature_ids):
+    nodes, error_message = get_timeline_nodes(feature_ids)
+    if error_message:
+        return False, error_message
+
+    groups = []
+    for node in nodes:
+        if node.obj.isGroup and not any(existing == node.obj for existing in groups):
+            groups.append(node.obj)
+
+    if not groups:
+        return False, 'Select one or more timeline groups to ungroup.'
+
+    for group in groups:
+        try:
+            if not group.isCollapsed:
+                group.isCollapsed = True
+            if not group.deleteMe(False):
+                return False, f'Fusion did not ungroup "{group.name}".'
+        except Exception as ungroup_error:
+            return False, str(ungroup_error)
+
+    return True, None
+
+def set_timeline_nodes_suppressed(feature_ids, suppressed):
+    nodes, error_message = get_timeline_nodes(feature_ids)
+    if error_message:
+        return False, error_message
+
+    target_nodes = [node for node in nodes if not node.obj.isGroup]
+    if not target_nodes:
+        return False, 'Select one or more timeline features.'
+
+    for node in target_nodes:
+        try:
+            node.obj.isSuppressed = suppressed
+        except Exception as suppress_error:
+            return False, f'Failed to update "{node.obj.name}": {suppress_error}'
+
+    return True, None
 
 def get_timeline_entity(obj):
     if obj.isGroup:
@@ -949,6 +1103,38 @@ def palette_incoming_from_html_handler(args):
                     ret = False
         html_commands.append(ret)
         html_commands.append(invalidate(send=False))
+    elif action == 'groupSelectedFeatures':
+        feature_ids = data.get('ids', [])
+        ret = False
+        timeline_status, timeline = featuremanagerlib.timeline.get_timeline()
+        if timeline_status == TIMELINE_STATUS_OK:
+            ret, group_error = group_timeline_nodes(feature_ids, timeline)
+            if ret:
+                schedule_palette_refresh([0.15, 0.5])
+            else:
+                ui.messageBox(f'Failed to group timeline items: {group_error}')
+        html_commands.append(ret)
+        html_commands.append(invalidate(send=False))
+    elif action == 'ungroupSelectedGroups':
+        feature_ids = data.get('ids', [])
+        ret, ungroup_error = ungroup_timeline_nodes(feature_ids)
+        if ret:
+            schedule_palette_refresh([0.15, 0.5])
+        else:
+            ui.messageBox(f'Failed to ungroup timeline group: {ungroup_error}')
+        html_commands.append(ret)
+        html_commands.append(invalidate(send=False))
+    elif action == 'setFeaturesSuppressed':
+        feature_ids = data.get('ids', [])
+        suppressed = bool(data.get('suppressed'))
+        ret, suppress_error = set_timeline_nodes_suppressed(feature_ids, suppressed)
+        if ret:
+            schedule_palette_refresh([0.15, 0.5])
+        else:
+            action_label = 'suppress' if suppressed else 'unsuppress'
+            ui.messageBox(f'Failed to {action_label} timeline features: {suppress_error}')
+        html_commands.append(ret)
+        html_commands.append(invalidate(send=False))
     elif action == 'rollToFeature':
         node = timeline_cache_map[data['id']]
         obj = node.obj
@@ -972,9 +1158,11 @@ def palette_incoming_from_html_handler(args):
         ret = False
         timeline_status, timeline = featuremanagerlib.timeline.get_timeline()
         if timeline_status == TIMELINE_STATUS_OK:
-            if before_position == node.marker_position or before_position == node.marker_after_position:
+            if marker_position_is_inside_node_span(node, before_position):
                 ret = True
             else:
+                if obj.isGroup and not obj.isCollapsed:
+                    obj.isCollapsed = True
                 if before_position >= timeline.count:
                     ret, reorder_error = reorder_timeline_object_to_end(obj, timeline)
                     if ret:
@@ -1017,15 +1205,15 @@ def palette_incoming_from_html_handler(args):
         ret = False
         marker_position = None
         if timeline_status == TIMELINE_STATUS_OK:
-            marker_position = int(data['position'])
-            marker_position = max(0, min(marker_position, timeline.count))
+            visual_marker_position = int(data['position'])
+            marker_position = get_native_marker_position(timeline, visual_marker_position)
             timeline.markerPosition = marker_position
             ret = True
             schedule_palette_refresh([0.15, 0.5])
         html_commands.append(ret)
         refresh_command = invalidate(send=False)
         if ret and refresh_command:
-            refresh_command['data']['marker-position'] = marker_position
+            refresh_command['data']['marker-position'] = get_visual_marker_position(timeline, marker_position)
         html_commands.append(refresh_command)
 
     if html_commands:

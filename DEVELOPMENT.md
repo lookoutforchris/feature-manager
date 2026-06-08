@@ -46,7 +46,7 @@ The sync script copies only add-in runtime files: `VerticalTimeline.py`, `Vertic
 
 Open Fusion, then use `Shift+S` to open **Scripts and Add-Ins**. On the **Add-Ins** tab, select `VerticalTimeline` and press **Run**. Use **Stop** from the same dialog to unload it.
 
-The add-in registers a **Toggle Vertical Timeline** command under the Fusion **File > View** menu. If the add-in setting is enabled and Fusion startup is complete, startup attempts to show the palette automatically.
+The add-in registers a **Toggle Feature Manager** command under the Fusion **File > View** menu. If the add-in setting is enabled and Fusion startup is complete, startup attempts to show the palette automatically.
 
 ## Event Flow
 
@@ -64,7 +64,7 @@ This milestone has lightweight diagnostics through `debug_log()` in `VerticalTim
 
 When temporarily debugging add-in lifecycle behavior, set `DEBUG_LOGGING = True` in `VerticalTimeline.py`, deploy to the installed add-in folder, and restart the add-in. Turn it back off before using Fusion MCP read tools for structured inspection.
 
-To gather errors, copy Fusion add-in error dialogs with `Ctrl+C` when shown. Also check Fusion's text command/output area for `Vertical Timeline:` diagnostic lines.
+To gather errors, copy Fusion add-in error dialogs with `Ctrl+C` when shown. Also check Fusion's text command/output area for `Feature Manager:` diagnostic lines.
 
 ## Verification
 
@@ -80,7 +80,7 @@ Runtime verification requires Fusion:
 2. Load the add-in from **Scripts and Add-Ins**.
 3. Confirm no startup error is shown.
 4. Open a parametric Design document.
-5. Toggle the Vertical Timeline palette.
+5. Toggle the Feature Manager palette.
 6. Confirm timeline entries populate and interactions can be exercised.
 
 Fusion MCP smoke check:

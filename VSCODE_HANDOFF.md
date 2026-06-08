@@ -61,7 +61,6 @@ explorer "C:\Users\Chris\AppData\Roaming\Autodesk\Autodesk Fusion 360\API\AddIns
 
 ## Current Working Context
 
-The workspace copy and installed Fusion add-in copy both have the defensive `ui.activeWorkspace` crash fix. The installed add-in has been verified through Fusion MCP to run and emit `Vertical Timeline:` diagnostic output.
+The workspace copy and installed Fusion add-in copy both have the defensive `ui.activeWorkspace` crash fix. The installed add-in has been verified through Fusion MCP to run and emit `Feature Manager:` diagnostic output.
 
 Next work should generally update the workspace first, verify with syntax checks, then deliberately copy or patch the installed add-in folder for Fusion runtime testing.
-

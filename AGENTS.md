@@ -2,9 +2,9 @@
 
 ## Project
 
-This repository is a working fork of `original-author/VerticalTimeline`, evolving toward a Fusion Feature Manager add-in: a left-side, SolidWorks-style feature/history manager for Autodesk Fusion.
+This repository is Feature Manager, a working fork of `original-author/VerticalTimeline`: a left-side, SolidWorks-style feature/history manager for Autodesk Fusion.
 
-Do not start with a rewrite. Stabilize the existing add-in first, document current Fusion API behavior, then refactor toward a richer FeatureManager UI.
+Do not start with a rewrite. Stabilize the existing add-in first, document current Fusion API behavior, then refactor toward a richer Feature Manager UI.
 
 ## Environment
 
@@ -21,7 +21,7 @@ Do not start with a rewrite. Stabilize the existing add-in first, document curre
 - UI is a Fusion HTML palette in `palette.html`.
 - Shared helper code is in the `featuremanagerlib/` submodule.
 - Manifest is `VerticalTimeline.manifest`.
-- Current runtime diagnostics use `print()` lines prefixed with `Vertical Timeline:`.
+- Current runtime diagnostics use `print()` lines prefixed with `Feature Manager:`.
 
 ## Development Rules
 

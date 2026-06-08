@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!--
 
-This file is part of VerticalTimeline, a Fusion 360 add-in that
-provides a vertical timeline.
+This file is part of Feature Manager, a Fusion add-in that
+provides a feature manager.
 
 Copyright (C) 2020  Thomas Axelsson
 
@@ -17,6 +17,7 @@ SPDX-License-Identifier: MIT
             body {
                 font-family: Arial, Helvetica, sans-serif;
                 font-size: 12px;
+                margin: 0;
             }
             body.dragging-history-marker {
                 cursor: ns-resize;
@@ -33,6 +34,9 @@ SPDX-License-Identifier: MIT
                 min-height: 95vh;
                 margin-left: 0px;
                 margin-right: 0px;
+            }
+            #message:empty {
+                display: none;
             }
             .feature {
                 list-style-type: none;
@@ -96,6 +100,12 @@ SPDX-License-Identifier: MIT
             .context-menu-icon {
                 color: #c8d6eb;
                 text-align: center;
+            }
+            .context-menu-icon img {
+                height: 20px;
+                max-width: 20px;
+                vertical-align: middle;
+                width: 20px;
             }
             .context-menu-shortcut {
                 padding-left: 24px;
@@ -210,6 +220,7 @@ SPDX-License-Identifier: MIT
                 opacity: 0.5;
             }
             ul {
+                margin: 0;
                 padding-left: 0px;
             }
         </style>
@@ -245,6 +256,7 @@ SPDX-License-Identifier: MIT
     var draggingMarker = false;
     var activeMarkerDropZone = null;
     var lastTimelineData = null;
+    var menuIcons = {};
     var contextMenuFeature = null;
     var selectedFeatureIds = new Set();
     var lastSelectedFeatureId = null;
@@ -264,8 +276,10 @@ SPDX-License-Identifier: MIT
             switch (action) {
                 case 'setTimeline':
                     lastTimelineData = data;
+                    menuIcons = data['menu-icons'] || {};
                     let message = document.getElementById('message');
                     message.innerText = data['message'];
+                    message.style.display = data['message'] ? 'block' : 'none';
 
                     let timeline = document.getElementById('timeline');
                     timeline.innerHTML = '';
@@ -288,9 +302,12 @@ SPDX-License-Identifier: MIT
         return 'OK';
     }
 
-    function appendItems(parent, features, maxParents, markerPosition, finalMarkerPosition=null, isGroup=false, markerRenderState=null) {
+    function appendItems(parent, features, maxParents, markerPosition, finalMarkerPosition=null, isGroup=false, markerRenderState=null, blockedMarkerPositions=null) {
         if (markerRenderState === null) {
             markerRenderState = { activeMarkerRendered: false };
+        }
+        if (blockedMarkerPositions === null) {
+            blockedMarkerPositions = new Set();
         }
         let list = document.createElement('ul');
         if (isGroup) {
@@ -300,8 +317,7 @@ SPDX-License-Identifier: MIT
         let renderedMarkerPositions = new Set();
         let nestedMarkerPositions = new Set();
         for (const feature of features) {
-            let renderMarkerBeforeFeature = !(feature.type == 'GROUP' && feature.children && feature.children.length > 0);
-            if (renderMarkerBeforeFeature &&
+            if (!blockedMarkerPositions.has(feature['marker-position']) &&
                 !renderedMarkerPositions.has(feature['marker-position']) &&
                 !nestedMarkerPositions.has(feature['marker-position'])) {
                 appendMarkerDropZone(list, feature['marker-position'], markerPosition, markerRenderState);
@@ -321,6 +337,7 @@ SPDX-License-Identifier: MIT
             }
             listItem.setAttribute('data-id', feature['id']);
             listItem.setAttribute('data-name', feature.name);
+            listItem.setAttribute('data-suppressed', feature.suppressed ? 'true' : 'false');
             listItem.setAttribute('data-type', feature.type);
             if (selectedFeatureIds.has(String(feature['id']))) {
                 listItem.classList.add('selected');
@@ -383,7 +400,8 @@ SPDX-License-Identifier: MIT
                 listItem.title = 'Group';
                 listItem.setAttribute('data-collapsed', feature.collapsed);
 
-                let groupList = appendItems(list, feature.children, maxParents, markerPosition, feature['marker-after-position'], true, markerRenderState);
+                let groupBlockedMarkerPositions = new Set([feature['marker-position']]);
+                let groupList = appendItems(list, feature.children, maxParents, markerPosition, feature['marker-after-position'], true, markerRenderState, groupBlockedMarkerPositions);
                 let toggleGroup = (event) => {
                     setGroupCollapsed(listItem, groupList, !isGroupCollapsed(listItem));
                     event.preventDefault();
@@ -627,43 +645,53 @@ SPDX-License-Identifier: MIT
     }
 
     function addFeatureContextMenuItems(menu) {
-        addContextMenuItem(menu, 'set', 'Create Selection Set', () => executeFusionFeatureCommand('CreateSelectionGroupCmd'));
+        let suppressInfo = getSuppressionMenuInfo();
+        addContextMenuItem(menu, menuIcon('create-selection-set'), 'Create Selection Set', () => executeFusionFeatureCommand('CreateSelectionGroupCmd'));
         addContextMenuSeparator(menu);
-        addContextMenuItem(menu, 'edit', 'Edit Feature', editContextFeature);
-        addContextMenuItem(menu, 'sk', 'Edit Profile Sketch', null, '', true);
-        addContextMenuItem(menu, 'cfg', 'Configure', null, '', true);
+        addContextMenuItem(menu, getContextFeatureIcon(), 'Edit Feature', editContextFeature);
+        addContextMenuItem(menu, menuIcon('configure'), 'Configure', () => executeFusionFeatureCommand('ConfigureFeatureCmd'));
         addContextMenuSeparator(menu);
-        addContextMenuItem(menu, 'del', 'Delete', () => executeFusionFeatureCommand('FusionDeleteCommand'), 'Del');
-        addContextMenuItem(menu, 'ren', 'Rename', renameContextFeature);
+        addContextMenuItem(menu, menuIcon('delete'), 'Delete', () => executeFusionFeatureCommand('FusionDeleteCommand'), 'Del');
+        addContextMenuItem(menu, '', 'Rename', renameContextFeature);
         addContextMenuSeparator(menu);
-        addContextMenuItem(menu, 'roll', 'Roll Timeline Marker Here', rollContextFeature);
-        addContextMenuItem(menu, 'dm', 'Convert to DM Feature', null, '', true);
-        addContextMenuItem(menu, 'sup', 'Suppress Features', null, '', true);
+        addContextMenuItem(menu, menuIcon('roll-marker'), 'Roll Timeline Marker Here', rollContextFeature);
+        addContextMenuItem(menu, menuIcon('convert-dm'), 'Convert to DM Feature', () => executeFusionFeatureCommand('ConvertToDMDesignCommand'));
+        addContextMenuItem(menu, menuIcon('suppress'), suppressInfo.label, () => setContextFeaturesSuppressed(suppressInfo.suppressed));
         addContextMenuSeparator(menu);
-        addContextMenuItem(menu, 'br', 'Find in Browser', null, '', true);
-        addContextMenuItem(menu, 'win', 'Find in Window', null, '', true);
+        addContextMenuItem(menu, menuIcon('find-browser'), 'Find in Browser', () => executeFusionFeatureCommand('FindInBrowser'));
+        addContextMenuItem(menu, menuIcon('find-window'), 'Find in Window', () => executeFusionFeatureCommand('FindInWindow'));
     }
 
     function addMultiFeatureContextMenuItems(menu, selectedCount) {
-        addContextMenuItem(menu, 'set', `Create Selection Set (${selectedCount})`, () => executeFusionFeatureCommand('CreateSelectionGroupCmd'));
+        let suppressInfo = getSuppressionMenuInfo();
+        let selectedItems = getContextFeatureItems();
+        let allGroups = selectedItems.length > 0 && selectedItems.every(item => item.getAttribute('data-type') == 'GROUP');
+        let anyGroups = selectedItems.some(item => item.getAttribute('data-type') == 'GROUP');
+
+        addContextMenuItem(menu, menuIcon('create-selection-set'), 'Create Selection Set', () => executeFusionFeatureCommand('CreateSelectionGroupCmd'));
         addContextMenuSeparator(menu);
-        addContextMenuItem(menu, 'grp', 'Group Selected Features', null, '', true);
-        addContextMenuItem(menu, 'ung', 'Ungroup Selected Groups', null, '', true);
+        addContextMenuItem(menu, menuIcon('configure'), 'Configure', () => executeFusionFeatureCommand('ConfigureFeatureCmd'), '', true);
         addContextMenuSeparator(menu);
-        addContextMenuItem(menu, 'del', `Delete ${selectedCount} Items`, () => executeFusionFeatureCommand('FusionDeleteCommand'), 'Del');
-        addContextMenuItem(menu, 'sup', 'Suppress Selected Features', null, '', true);
+        if (allGroups) {
+            addContextMenuItem(menu, menuIcon('ungroup'), 'Ungroup', ungroupSelectedGroups);
+        } else {
+            addContextMenuItem(menu, menuIcon('create-group'), 'Create Group', groupSelectedFeatures, '', anyGroups);
+        }
+        addContextMenuSeparator(menu);
+        addContextMenuItem(menu, menuIcon('delete'), 'Delete', () => executeFusionFeatureCommand('FusionDeleteCommand'), 'Del');
+        addContextMenuItem(menu, '', 'Rename', renameContextFeature);
+        addContextMenuSeparator(menu);
+        addContextMenuItem(menu, menuIcon('roll-marker'), 'Roll Timeline Marker Here', rollContextFeature);
+        addContextMenuItem(menu, menuIcon('convert-dm'), 'Convert to DM Feature', () => executeFusionFeatureCommand('ConvertToDMDesignCommand'), '', anyGroups);
+        addContextMenuItem(menu, menuIcon('suppress'), suppressInfo.label, () => setContextFeaturesSuppressed(suppressInfo.suppressed), '', allGroups);
     }
 
     function addGroupContextMenuItems(menu, item) {
-        let collapsed = isGroupCollapsed(item);
-        addContextMenuItem(menu, 'ren', 'Rename Group', renameContextFeature);
-        addContextMenuItem(menu, collapsed ? 'exp' : 'col', collapsed ? 'Expand Group' : 'Collapse Group', toggleContextGroupCollapsed);
+        addContextMenuItem(menu, '', 'Rename Group', renameContextFeature);
         addContextMenuSeparator(menu);
-        addContextMenuItem(menu, 'roll', 'Roll Timeline Marker Here', rollContextFeature);
+        addContextMenuItem(menu, menuIcon('roll-marker'), 'Roll Timeline Marker Here', rollContextFeature);
         addContextMenuSeparator(menu);
-        addContextMenuItem(menu, 'up', 'Move Group Up', null, '', true);
-        addContextMenuItem(menu, 'dn', 'Move Group Down', null, '', true);
-        addContextMenuItem(menu, 'del', 'Delete Group / Ungroup', null, '', true);
+        addContextMenuItem(menu, menuIcon('ungroup'), 'Ungroup', ungroupSelectedGroups);
     }
 
     function addContextMenuItem(menu, icon, label, action, shortcut='', disabled=false) {
@@ -675,7 +703,12 @@ SPDX-License-Identifier: MIT
 
         let iconElement = document.createElement('span');
         iconElement.classList.add('context-menu-icon');
-        iconElement.innerText = icon;
+        if (icon) {
+            let iconImage = document.createElement('img');
+            iconImage.src = icon;
+            iconImage.alt = '';
+            iconElement.appendChild(iconImage);
+        }
 
         let labelElement = document.createElement('span');
         labelElement.innerText = label;
@@ -725,6 +758,32 @@ SPDX-License-Identifier: MIT
         return ids;
     }
 
+    function getContextFeatureItems() {
+        let ids = new Set(getContextFeatureIds().map(id => String(id)));
+        return getFeatureItems().filter(item => ids.has(item.getAttribute('data-id')));
+    }
+
+    function getContextFeatureIcon() {
+        if (!contextMenuFeature) {
+            return '';
+        }
+        let image = contextMenuFeature.querySelector('.icon');
+        return image ? image.src : '';
+    }
+
+    function menuIcon(name) {
+        return menuIcons[name] || '';
+    }
+
+    function getSuppressionMenuInfo() {
+        let selectedItems = getContextFeatureItems().filter(item => item.getAttribute('data-type') != 'GROUP');
+        let allSuppressed = selectedItems.length > 0 && selectedItems.every(item => item.getAttribute('data-suppressed') == 'true');
+        if (allSuppressed) {
+            return { label: 'Unsuppress Features', suppressed: false };
+        }
+        return { label: 'Suppress Features', suppressed: true };
+    }
+
     function editContextFeature() {
         let ret = query('editFeature', { 'id': getContextFeatureId() });
         processCommands(ret);
@@ -741,6 +800,21 @@ SPDX-License-Identifier: MIT
     function rollContextFeature() {
         let ret = query('rollToFeature', { 'id': getContextFeatureId() });
         processCommands(ret);
+    }
+
+    function groupSelectedFeatures() {
+        let ret = query('groupSelectedFeatures', { 'ids': getContextFeatureIds() });
+        processCommands(ret.slice(1));
+    }
+
+    function ungroupSelectedGroups() {
+        let ret = query('ungroupSelectedGroups', { 'ids': getContextFeatureIds() });
+        processCommands(ret.slice(1));
+    }
+
+    function setContextFeaturesSuppressed(suppressed) {
+        let ret = query('setFeaturesSuppressed', { 'ids': getContextFeatureIds(), 'suppressed': suppressed });
+        processCommands(ret.slice(1));
     }
 
     function toggleContextGroupCollapsed() {
