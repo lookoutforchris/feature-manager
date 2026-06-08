@@ -8,17 +8,17 @@ Clone the repository:
 git clone https://github.com/lookoutforchris/feature-manager.git
 ```
 
-Expected working files include `VerticalTimeline.py`, `VerticalTimeline.manifest`, `palette.html`, `resources/`, and `featuremanagerlib/`.
+Expected working files include `FeatureManager.py`, `FeatureManager.manifest`, `palette.html`, `resources/`, and `featuremanagerlib/`.
 
 ## Install in Fusion
 
 For the current Windows Fusion setup, install or copy this folder to:
 
 ```text
-%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\VerticalTimeline
+%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\FeatureManager
 ```
 
-Fusion expects the add-in folder name to match the manifest location. Keep `VerticalTimeline.manifest` beside `VerticalTimeline.py`.
+Fusion expects the add-in folder name to match the manifest location. Keep `FeatureManager.manifest` beside `FeatureManager.py`.
 
 ## Deploy Workspace Changes
 
@@ -34,11 +34,11 @@ Preview the copy operations first:
 .\tools\Sync-InstalledAddIn.ps1 -WhatIf
 ```
 
-The sync script copies only add-in runtime files: `VerticalTimeline.py`, `VerticalTimeline.manifest`, `palette.html`, `resources/`, and `featuremanagerlib/`. It does not copy planning docs, `.git`, `.codex`, or the installed add-in's `settings.json`.
+The sync script copies only add-in runtime files: `FeatureManager.py`, `FeatureManager.manifest`, `palette.html`, `resources/`, and `featuremanagerlib/`. It does not copy planning docs, `.git`, `.codex`, or the installed add-in's `settings.json`.
 
 ## Run and Stop
 
-Open Fusion, then use `Shift+S` to open **Scripts and Add-Ins**. On the **Add-Ins** tab, select `VerticalTimeline` and press **Run**. Use **Stop** from the same dialog to unload it.
+Open Fusion, then use `Shift+S` to open **Scripts and Add-Ins**. On the **Add-Ins** tab, select `FeatureManager` and press **Run**. Use **Stop** from the same dialog to unload it.
 
 The add-in registers a **Toggle Feature Manager** command under the Fusion **File > View** menu. If the add-in setting is enabled and Fusion startup is complete, startup attempts to show the palette automatically.
 
@@ -54,9 +54,9 @@ The add-in registers a **Toggle Feature Manager** command under the Fusion **Fil
 
 ## Diagnostics
 
-This milestone has lightweight diagnostics through `debug_log()` in `VerticalTimeline.py`. Diagnostics are gated by `DEBUG_LOGGING = False` by default because Fusion MCP read tools parse script output as JSON, and unrelated add-in `print()` output can corrupt those responses.
+This milestone has lightweight diagnostics through `debug_log()` in `FeatureManager.py`. Diagnostics are gated by `DEBUG_LOGGING = False` by default because Fusion MCP read tools parse script output as JSON, and unrelated add-in `print()` output can corrupt those responses.
 
-When temporarily debugging add-in lifecycle behavior, set `DEBUG_LOGGING = True` in `VerticalTimeline.py`, deploy to the installed add-in folder, and restart the add-in. Turn it back off before using Fusion MCP read tools for structured inspection.
+When temporarily debugging add-in lifecycle behavior, set `DEBUG_LOGGING = True` in `FeatureManager.py`, deploy to the installed add-in folder, and restart the add-in. Turn it back off before using Fusion MCP read tools for structured inspection.
 
 To gather errors, copy Fusion add-in error dialogs with `Ctrl+C` when shown. Also check Fusion's text command/output area for `Feature Manager:` diagnostic lines.
 
@@ -65,7 +65,7 @@ To gather errors, copy Fusion add-in error dialogs with `Ctrl+C` when shown. Als
 Static syntax check outside Fusion:
 
 ```powershell
-python -m py_compile .\VerticalTimeline.py
+python -m py_compile .\FeatureManager.py
 ```
 
 Runtime verification requires Fusion:

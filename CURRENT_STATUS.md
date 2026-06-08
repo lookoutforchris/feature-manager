@@ -2,7 +2,7 @@
 
 ## Milestone 1 Snapshot
 
-This repository is a direct clone of `original-author/VerticalTimeline` with the `featuremanagerlib` submodule present. The initial stabilization change is intentionally small and keeps the existing UI and event model intact.
+This repository started from an abandoned upstream Fusion timeline add-in and has been substantially reworked into Feature Manager. The current implementation keeps the stable Python/HTML palette architecture while replacing the visible product identity and adding Feature Manager behavior.
 
 Pre-group-management restore point: git commit `eeb5eee` (`Milestone: Feature Manager core interactions`).
 
@@ -24,7 +24,7 @@ This is now handled when Fusion temporarily cannot provide `ui.activeWorkspace`.
 
 ## What Works From Static Inspection
 
-The add-in entry points are `run(context)` and `stop(context)` in `VerticalTimeline.py`.
+The add-in entry points are `run(context)` and `stop(context)` in `FeatureManager.py`.
 
 Palette creation uses `ui.palettes.addTransparent()` with `palette.html`, docks left, and communicates through Fusion HTML palette events.
 

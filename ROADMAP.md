@@ -1,10 +1,10 @@
 # Roadmap
 
-This project starts from `original-author/VerticalTimeline` and should evolve cautiously. The first goal is not a rewrite. The first goal is a stable, observable add-in that can be tested against current Fusion behavior.
+This project started from an abandoned Fusion timeline add-in and should evolve cautiously. The first goal is not a rewrite. The first goal is a stable, observable add-in that can be tested against current Fusion behavior.
 
 ## Phase 0: Upstream Stabilization
 
-Purpose: make the existing VerticalTimeline reliable enough to use as a baseline.
+Purpose: make the existing Feature Manager baseline reliable enough to use as a foundation.
 
 - Keep the defensive `ui.activeWorkspace` handling for Fusion document/workspace transitions.
 - Verify the installed add-in loads cleanly in current Fusion.
@@ -68,4 +68,3 @@ Requirements should be split into:
 2. Update `CURRENT_STATUS.md` with observed working and broken behavior.
 3. Triage Phase 1 bugs into small patches.
 4. Start a requirements review document for the SolidWorks-style manager.
-

@@ -1,6 +1,6 @@
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
-    [string]$InstallPath = (Join-Path $env:APPDATA "Autodesk\Autodesk Fusion 360\API\AddIns\VerticalTimeline")
+    [string]$InstallPath = (Join-Path $env:APPDATA "Autodesk\Autodesk Fusion 360\API\AddIns\FeatureManager")
 )
 
 $ErrorActionPreference = "Stop"
@@ -8,15 +8,15 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 
 $items = @(
-    "VerticalTimeline.py",
-    "VerticalTimeline.manifest",
+    "FeatureManager.py",
+    "FeatureManager.manifest",
     "palette.html",
     "resources",
     "featuremanagerlib"
 )
 
 if (-not (Test-Path -LiteralPath $InstallPath -PathType Container)) {
-    throw "Install path does not exist: $InstallPath"
+    New-Item -ItemType Directory -Path $InstallPath -Force | Out-Null
 }
 
 foreach ($item in $items) {
@@ -33,7 +33,7 @@ foreach ($item in $items) {
 }
 
 if ($WhatIfPreference) {
-    Write-Host "Previewed VerticalTimeline add-in sync to: $InstallPath"
+    Write-Host "Previewed Feature Manager add-in sync to: $InstallPath"
 } else {
-    Write-Host "Synced VerticalTimeline add-in files to: $InstallPath"
+    Write-Host "Synced Feature Manager add-in files to: $InstallPath"
 }

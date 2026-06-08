@@ -1,9 +1,8 @@
 # Feature Manager
 
 Feature Manager is an Autodesk Fusion add-in that adds a left-side, floating
-feature/history manager for timeline features. It is a working fork of
-`original-author/VerticalTimeline`, evolving toward a SolidWorks-style feature
-tree while staying inside Fusion's API constraints.
+feature/history manager for timeline features. It is evolving toward a
+SolidWorks-style feature tree while staying inside Fusion's API constraints.
 
 ![](screenshot.png)
 
@@ -19,12 +18,11 @@ No public release package has been published from this fork yet.
 For local development, copy or sync this add-in into Fusion's add-in folder:
 
 ```text
-%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\VerticalTimeline
+%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\FeatureManager
 ```
 
-The installed directory is still named `VerticalTimeline` for compatibility
-with the current manifest and development setup. The visible add-in and palette
-name is **Feature Manager**.
+The installed directory should be named `FeatureManager`. The visible add-in and
+palette name is **Feature Manager**.
 
 Fusion's general add-in installation flow is documented by Autodesk in
 **How to install an add-in or script in Fusion 360**.
@@ -96,7 +94,7 @@ The add-in still works around known Fusion API limitations:
 Current add-in version: `1.0.0`.
 
 This is Feature Manager's first independent version line. It is intentionally
-not based on the original VerticalTimeline version numbers.
+not based on the upstream add-in's version numbers.
 
 ## Changelog
 
@@ -113,6 +111,6 @@ not based on the original VerticalTimeline version numbers.
 
 ## License
 
-This fork is distributed under the MIT License. The original VerticalTimeline
-files were made available under `GPL-3.0-or-later OR MIT`; Feature Manager
-elects the MIT option and retains the required upstream copyright notices.
+This project is distributed under the MIT License. It derives from upstream
+files made available under `GPL-3.0-or-later OR MIT`; Feature Manager elects
+the MIT option and retains the required upstream copyright notices.

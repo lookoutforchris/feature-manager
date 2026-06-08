@@ -80,8 +80,7 @@ The target is not a cosmetic clone. The target is equivalent workflow value wher
 
 ## Decision Log
 
-- Start from the existing VerticalTimeline add-in rather than rewriting immediately.
+- Start from the existing Feature Manager baseline rather than rewriting immediately.
 - Fix known upstream bugs and runtime crashes first.
 - Use Fusion MCP for runtime inspection and test loops.
 - Treat SolidWorks-style behavior as an aspirational target constrained by Fusion API capability.
-

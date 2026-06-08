@@ -23,9 +23,9 @@ import threading
 
 NAME = 'Feature Manager'
 FILE_DIR = os.path.dirname(os.path.realpath(__file__))
-PALETTE_ID = 'featureManager_verticalTimelinePalette'
-COMMAND_ID = 'featureManager_showVerticalTimeline'
-INITIAL_PALETTE_REFRESH_EVENT = 'featureManager_verticalTimeline_initialRefresh'
+PALETTE_ID = 'featureManager_palette'
+COMMAND_ID = 'featureManager_toggle'
+INITIAL_PALETTE_REFRESH_EVENT = 'featureManager_initialRefresh'
 PALETTE_DEFAULT_WIDTH = 435
 PALETTE_DEFAULT_HEIGHT = 500
 PALETTE_MIN_WIDTH = 435
@@ -309,7 +309,7 @@ def invalidate(send=True, clear=False, force=False):
     global timeline_marker_position
     global html_ready
 
-    palette = ui.palettes.itemById('featureManager_verticalTimelinePalette')
+    palette = ui.palettes.itemById(PALETTE_ID)
 
     if not palette or (not html_ready and not force):
         return
@@ -622,15 +622,15 @@ def run(context):
         ui = app.userInterface
 
         # Add a command that displays the palette
-        toggle_palette_cmd_def = ui.commandDefinitions.itemById('featureManager_showVerticalTimeline')
+        toggle_palette_cmd_def = ui.commandDefinitions.itemById(COMMAND_ID)
 
         if not toggle_palette_cmd_def:
             toggle_palette_cmd_def = ui.commandDefinitions.addButtonDefinition(
-                'featureManager_showVerticalTimeline',
+                COMMAND_ID,
                 'Toggle Feature Manager',
                 'Feature Manager\n\n' +
                 'A vertical feature manager for Fusion timeline features.',
-                './resources/verticaltimeline')
+                './resources/featuremanager')
 
             events_manager.add_handler(toggle_palette_cmd_def.commandCreated,
                         adsk.core.CommandCreatedEventHandler,
@@ -639,7 +639,7 @@ def run(context):
         # Add the command to the View menu
         view_drop_down = get_view_drop_down()
         
-        cntrl = view_drop_down.controls.itemById('featureManager_showVerticalTimeline')
+        cntrl = view_drop_down.controls.itemById(COMMAND_ID)
         if not cntrl:
             view_drop_down.controls.addCommand(toggle_palette_cmd_def,
                                                'SeparatorAfter_DashboardModeCloseCommand', False) 
@@ -688,16 +688,16 @@ def stop(context):
         events_manager.clean_up()
 
         # Delete the palette created by this add-in.
-        palette = ui.palettes.itemById('featureManager_verticalTimelinePalette')
+        palette = ui.palettes.itemById(PALETTE_ID)
         if palette:
             palette.deleteMe()
 
         # Delete controls and associated command definitions created by this add-ins
         view_drop_down = get_view_drop_down()
-        cntrl = view_drop_down.controls.itemById('featureManager_showVerticalTimeline')
+        cntrl = view_drop_down.controls.itemById(COMMAND_ID)
         if cntrl:
             cntrl.deleteMe()
-        cmdDef = ui.commandDefinitions.itemById('featureManager_showVerticalTimeline')
+        cmdDef = ui.commandDefinitions.itemById(COMMAND_ID)
         if cmdDef:
             cmdDef.deleteMe()
 
@@ -722,7 +722,7 @@ def show_palette():
         html_ready = False
         debug_log('creating palette')
 
-        palette = ui.palettes.addTransparent('featureManager_verticalTimelinePalette', 'FEATURE MANAGER',
+        palette = ui.palettes.addTransparent(PALETTE_ID, 'FEATURE MANAGER',
                                     'palette.html',
                                     True, False, True, False, PALETTE_DEFAULT_WIDTH, PALETTE_DEFAULT_HEIGHT)
         palette.setMinimumSize(PALETTE_MIN_WIDTH, PALETTE_MIN_HEIGHT)
@@ -743,7 +743,7 @@ def show_palette():
             palette.isVisible = True
 
 def hide_palette():
-    palette = ui.palettes.itemById('featureManager_verticalTimelinePalette')
+    palette = ui.palettes.itemById(PALETTE_ID)
     if palette:
         debug_log('hiding palette')
         palette.isVisible = False
@@ -988,7 +988,7 @@ def schedule_palette_refresh(delays):
 
 def initial_palette_refresh_handler(args):
     global html_ready
-    palette = ui.palettes.itemById('featureManager_verticalTimelinePalette')
+    palette = ui.palettes.itemById(PALETTE_ID)
     if not palette:
         return
 

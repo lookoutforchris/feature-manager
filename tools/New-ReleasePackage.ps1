@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$manifestPath = Join-Path $repoRoot "VerticalTimeline.manifest"
+$manifestPath = Join-Path $repoRoot "FeatureManager.manifest"
 
 if (-not $Version) {
     $manifestText = Get-Content -LiteralPath $manifestPath -Raw
@@ -19,7 +19,7 @@ if (-not $Version) {
 }
 
 $packageRoot = Join-Path $OutputDirectory "FeatureManager-$Version"
-$addInRoot = Join-Path $packageRoot "VerticalTimeline"
+$addInRoot = Join-Path $packageRoot "FeatureManager"
 $archivePath = Join-Path $OutputDirectory "FeatureManager-$Version.zip"
 
 if (Test-Path -LiteralPath $packageRoot) {
@@ -32,8 +32,8 @@ if (Test-Path -LiteralPath $archivePath) {
 New-Item -ItemType Directory -Path $addInRoot -Force | Out-Null
 
 $items = @(
-    "VerticalTimeline.py",
-    "VerticalTimeline.manifest",
+    "FeatureManager.py",
+    "FeatureManager.manifest",
     "palette.html",
     "LICENSE",
     "README.md"
@@ -50,10 +50,10 @@ foreach ($item in $items) {
     Copy-Item -LiteralPath $source -Destination $destination -Recurse -Force
 }
 
-$resourceRoot = Join-Path $addInRoot "resources\verticaltimeline"
+$resourceRoot = Join-Path $addInRoot "resources\featuremanager"
 New-Item -ItemType Directory -Path $resourceRoot -Force | Out-Null
-Copy-Item -LiteralPath (Join-Path $repoRoot "resources\verticaltimeline\16x16.png") -Destination $resourceRoot -Force
-Copy-Item -LiteralPath (Join-Path $repoRoot "resources\verticaltimeline\32x32.png") -Destination $resourceRoot -Force
+Copy-Item -LiteralPath (Join-Path $repoRoot "resources\featuremanager\16x16.png") -Destination $resourceRoot -Force
+Copy-Item -LiteralPath (Join-Path $repoRoot "resources\featuremanager\32x32.png") -Destination $resourceRoot -Force
 
 $libraryRoot = Join-Path $addInRoot "featuremanagerlib"
 New-Item -ItemType Directory -Path (Join-Path $libraryRoot "win") -Force | Out-Null

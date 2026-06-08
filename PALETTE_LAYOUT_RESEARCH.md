@@ -16,7 +16,7 @@ Fusion exposes both palettes through `ui.palettes`:
   - observed `dockingState`: left
   - observed `dockingOption`: vertical-only
 - Feature Manager palette:
-  - `id`: `featureManager_verticalTimelinePalette`
+  - `id`: `featureManager_palette`
   - `name`: `FEATURE MANAGER`
   - `isNative`: `False`
   - `isVisible`: `True`

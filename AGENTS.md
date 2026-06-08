@@ -2,14 +2,14 @@
 
 ## Project
 
-This repository is Feature Manager, a working fork of `original-author/VerticalTimeline`: a left-side, SolidWorks-style feature/history manager for Autodesk Fusion.
+This repository is Feature Manager: a left-side, SolidWorks-style feature/history manager for Autodesk Fusion.
 
 Do not start with a rewrite. Stabilize the existing add-in first, document current Fusion API behavior, then refactor toward a richer Feature Manager UI.
 
 ## Environment
 
 - Workspace: local project checkout
-- Installed Fusion add-in: `%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\VerticalTimeline`
+- Installed Fusion add-in: `%APPDATA%\Autodesk\Autodesk Fusion 360\API\AddIns\FeatureManager`
 - Fusion MCP endpoint: `http://127.0.0.1:27182/mcp`
 - Local editor: VS Code
 - Shell: PowerShell on Windows
@@ -17,10 +17,10 @@ Do not start with a rewrite. Stabilize the existing add-in first, document curre
 
 ## Architecture
 
-- Fusion integration is Python in `VerticalTimeline.py`.
+- Fusion integration is Python in `FeatureManager.py`.
 - UI is a Fusion HTML palette in `palette.html`.
 - Shared helper code is in the `featuremanagerlib/` submodule.
-- Manifest is `VerticalTimeline.manifest`.
+- Manifest is `FeatureManager.manifest`.
 - Current runtime diagnostics use `print()` lines prefixed with `Feature Manager:`.
 
 ## Development Rules
@@ -40,7 +40,7 @@ Do not start with a rewrite. Stabilize the existing add-in first, document curre
 Static syntax check:
 
 ```powershell
-python -m py_compile .\VerticalTimeline.py
+python -m py_compile .\FeatureManager.py
 ```
 
 Fusion runtime checks should use MCP when available:
