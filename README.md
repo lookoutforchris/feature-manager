@@ -4,7 +4,7 @@ A Fusion add-in that adds a left-side feature manager for timeline features.
 
 ![](screenshot.png)
 
-The functionality is limited at this point  (see [Usage](#usage)) and performance need to be improved for use with large files.
+The functionality is still being tested against larger files, and performance needs to be improved for use with very large timelines.
 
 ## Installation
 
@@ -18,12 +18,15 @@ For now, keep the installed directory named `VerticalTimeline`, with no suffix. 
 
 The palette is shown using *File* -> *View* -> *Toggle Feature Manager*.
 
-* Click an item to select it*.
-* Double-click on an item to edit it*.
+* Click an item to select it.
+* Ctrl-click to toggle additional items.
+* Shift-click to select a contiguous range.
+* Double-click on an item to edit it.
 * Click on an item text to rename it.
-* Right click an item to roll to it.
-
- \* See TODO.
+* Drag the blue history marker to roll the timeline.
+* Drag feature or group rows to reorder them where Fusion allows.
+* Right-click items for Feature Manager context commands such as Edit Feature, Delete, Rename, Roll Timeline Marker Here, Suppress/Unsuppress Features, Find in Browser, Create Group, and Ungroup.
+* Groups can be expanded/collapsed with the disclosure arrow.
 
 The add-in can be temporarily disabled using the *Scripts and Add-ins* dialog. Press *Shift+S* in Fusion 360™ and go to the *Add-Ins* tab.
 

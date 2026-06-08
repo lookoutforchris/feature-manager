@@ -52,7 +52,7 @@ The add-in registers a **Toggle Feature Manager** command under the Fusion **Fil
 
 `run(context)` initializes `app` and `ui`, registers the toggle command, adds the View menu control, and subscribes to command, document, and workspace events.
 
-`show_palette()` creates the left-docked HTML palette from `palette.html` and attaches `incomingFromHTML` and `closed` handlers. `palette_incoming_from_html_handler()` receives browser-side actions such as `ready`, rename, select, edit, and roll-to commands.
+`show_palette()` creates the left-docked transparent HTML palette from `palette.html` and attaches `incomingFromHTML` and `closed` handlers. `palette_incoming_from_html_handler()` receives browser-side actions such as `ready`, rename, select, edit, marker movement, reorder, group, ungroup, suppress/unsuppress, and native command execution.
 
 `invalidate()` reads the Fusion timeline through `featuremanagerlib.timeline.get_timeline()`, converts timeline objects into palette data, and sends `setTimeline` to the HTML palette.
 
@@ -82,6 +82,7 @@ Runtime verification requires Fusion:
 4. Open a parametric Design document.
 5. Toggle the Feature Manager palette.
 6. Confirm timeline entries populate and interactions can be exercised.
+7. Confirm transparent empty areas show the Fusion canvas below, while row text, context menus, and marker controls remain readable and interactive.
 
 Fusion MCP smoke check:
 
