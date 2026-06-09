@@ -771,6 +771,8 @@ def get_associated_component(entity):
         return entity.sourceComponent
     elif isinstance(entity, adsk.fusion.ConstructionPlane):
         return entity.parent
+    elif not hasattr(entity, 'parentComponent'):
+        return None
     else:
         return entity.parentComponent
 
@@ -793,6 +795,10 @@ def build_selection(entity, design, use_body_fallback=False):
 
     if use_body_fallback:
         add_body_selection_fallback(selection, entity, design, associated_component)
+        return selection
+
+    if associated_component is None:
+        selection.add(entity)
         return selection
 
     if associated_component == design.rootComponent:
