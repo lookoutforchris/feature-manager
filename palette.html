@@ -23,6 +23,37 @@ SPDX-License-Identifier: MIT
                 font-size: 12px;
                 margin: 0;
             }
+            html::-webkit-scrollbar,
+            body::-webkit-scrollbar,
+            #content::-webkit-scrollbar {
+                height: 8px;
+                width: 8px;
+            }
+            html::-webkit-scrollbar-track,
+            body::-webkit-scrollbar-track,
+            #content::-webkit-scrollbar-track {
+                background: transparent;
+            }
+            html::-webkit-scrollbar-thumb,
+            body::-webkit-scrollbar-thumb,
+            #content::-webkit-scrollbar-thumb {
+                background-color: rgba(132, 148, 170, 0.75);
+                border: 2px solid transparent;
+                border-radius: 8px;
+                background-clip: content-box;
+            }
+            html::-webkit-scrollbar-thumb:hover,
+            body::-webkit-scrollbar-thumb:hover,
+            #content::-webkit-scrollbar-thumb:hover {
+                background-color: rgba(172, 185, 203, 0.9);
+            }
+            html::-webkit-scrollbar-button,
+            body::-webkit-scrollbar-button,
+            #content::-webkit-scrollbar-button {
+                display: none;
+                height: 0;
+                width: 0;
+            }
             body.dragging-history-marker {
                 cursor: ns-resize;
                 user-select: none;
@@ -36,9 +67,12 @@ SPDX-License-Identifier: MIT
                 display: flex;
                 flex-direction: column;
                 justify-content: space-between;
+                max-height: 100vh;
                 min-height: 95vh;
                 margin-left: 0px;
                 margin-right: 0px;
+                overflow-y: auto;
+                outline: none;
             }
             #message:empty {
                 display: none;
@@ -603,6 +637,10 @@ SPDX-License-Identifier: MIT
         return Array.from(document.querySelectorAll('.feature'));
     }
 
+    function getVisibleFeatureItems() {
+        return getFeatureItems().filter(item => item.offsetParent !== null);
+    }
+
     function getSelectedFeatureIds() {
         return Array.from(selectedFeatureIds).map(id => parseInt(id));
     }
@@ -653,6 +691,47 @@ SPDX-License-Identifier: MIT
         }
 
         setSelectedFeatureIds([id]);
+    }
+
+    function moveKeyboardSelection(direction, extendSelection=false) {
+        let items = getVisibleFeatureItems();
+        if (items.length == 0) {
+            return;
+        }
+
+        let currentIndex = items.findIndex(item => item.getAttribute('data-id') == lastSelectedFeatureId);
+        if (currentIndex < 0) {
+            currentIndex = direction > 0 ? -1 : items.length;
+        }
+
+        let nextIndex = Math.max(0, Math.min(items.length - 1, currentIndex + direction));
+        selectKeyboardFeature(items, nextIndex, extendSelection);
+    }
+
+    function moveKeyboardSelectionToBoundary(index, extendSelection=false) {
+        let items = getVisibleFeatureItems();
+        if (items.length == 0) {
+            return;
+        }
+
+        selectKeyboardFeature(items, index, extendSelection);
+    }
+
+    function selectKeyboardFeature(items, index, extendSelection=false) {
+        let item = items[index];
+        if (!item) {
+            return;
+        }
+
+        if (extendSelection && lastSelectedFeatureId !== null) {
+            updateFeatureSelection(item, false, true);
+        } else {
+            setSelectedFeatureIds([item.getAttribute('data-id')]);
+        }
+
+        item.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        let ret = query('selectFeatures', { 'ids': getSelectedFeatureIds() } );
+        processCommands(ret);
     }
 
     function onFeatureContextMenu(e) {
@@ -1256,11 +1335,44 @@ SPDX-License-Identifier: MIT
         }
     });
     document.addEventListener('keydown', (e) => {
+        if (e.target && e.target.isContentEditable) {
+            return;
+        }
+
         if (e.key == 'Escape') {
             hideContextMenu();
             if (pendingFeatureDrag || draggedFeatureId !== null) {
                 finishFeatureDrag();
             }
+            return;
+        }
+
+        if (e.key == 'ArrowDown') {
+            hideContextMenu();
+            moveKeyboardSelection(1, e.shiftKey);
+            e.preventDefault();
+            return;
+        }
+
+        if (e.key == 'ArrowUp') {
+            hideContextMenu();
+            moveKeyboardSelection(-1, e.shiftKey);
+            e.preventDefault();
+            return;
+        }
+
+        if (e.key == 'Home') {
+            hideContextMenu();
+            moveKeyboardSelectionToBoundary(0, e.shiftKey);
+            e.preventDefault();
+            return;
+        }
+
+        if (e.key == 'End') {
+            hideContextMenu();
+            moveKeyboardSelectionToBoundary(getVisibleFeatureItems().length - 1, e.shiftKey);
+            e.preventDefault();
+            return;
         }
     });
     window.addEventListener('blur', () => {
