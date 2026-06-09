@@ -486,7 +486,10 @@ def get_feature_parent_path(component_parent_map, obj, feature=None):
         if obj.isRolledBack or obj.isSuppressed:
             # No parent component will be available
             return []
-        parent_name = component_parent_map[feature.component.name]
+        parent_name = component_parent_map.get(feature.component.name)
+        if parent_name is None:
+            debug_log('missing parent map entry for occurrence component: ' + feature.component.name)
+            return []
     elif feature_type == 'ConstructionPlane':
         if (feature.parent.classType() == 'adsk::fusion::Component' and
             feature.parent != design.rootComponent):
