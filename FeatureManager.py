@@ -27,7 +27,7 @@ PALETTE_ID = 'featureManager_palette'
 COMMAND_ID = 'featureManager_toggle'
 INITIAL_PALETTE_REFRESH_EVENT = 'featureManager_initialRefresh'
 PALETTE_DEFAULT_WIDTH = 435
-PALETTE_DEFAULT_HEIGHT = 500
+PALETTE_DEFAULT_HEIGHT = 2000
 PALETTE_MIN_WIDTH = 435
 PALETTE_MIN_HEIGHT = 300
 
@@ -161,6 +161,7 @@ FEATURE_RESOURCE_MAP = {
     'MirrorFeature': ('Fusion/UI/FusionUI/Resources/pattern/pattern_mirror', 'FusionDcMirrorPatternEditCommand'),
     'ThickenFeature': ('Fusion/UI/FusionUI/Resources/surface/thicken', 'FusionDcSurfaceThickenEditCommand'),
     'BaseFeature': ('Fusion/UI/FusionUI/Resources/Modeling/BaseFeature', 'BaseFeatureActivate'),
+    'MeshPlaneCutFeature': ('Applications/ParaMesh/UI/ParaMeshUI/Resources/Icons/ParaMeshPlaneCut', 'ParaMeshDcPlaneCutEditCommand'),
     'RemoveFeature': ('Fusion/UI/FusionUI/Resources/_return', ''),
     'HoleFeature': ('Fusion/UI/FusionUI/Resources/solid/hole', 'FusionDcHoleEditCommand'),
     'ThreadFeature': ('Fusion/UI/FusionUI/Resources/solid/thread', 'FusionDcThreadEditCommand'),
@@ -210,6 +211,14 @@ FEATURE_RESOURCE_MAP = {
     # insert derive feature: 'Fusion/UI/FusionUI/Resources/Derive/CloneWM',
 }
 
+GENERIC_FEATURE_RESOURCE_BY_NAME = [
+    (('lavorazione mesh di base', 'base mesh feature'), ('Fusion/UI/FusionUI/Resources/TSpline/Convert/MeshBody', 'MeshBaseFeatureActivate')),
+    (('modifica', 'edit'), ('Applications/ParaMesh/UI/ParaMeshUI/Resources/Icons/ParaMeshMove', 'ParaMeshDcMoveCopyEditCommand')),
+    (('sezionemesh', 'mesh section'), ('Applications/ParaMesh/UI/ParaMeshUI/Resources/Icons/ParaMeshPlanarSection', 'ParaMeshDcPlanarSectionEditCommand')),
+    (('scala', 'scale'), ('Applications/ParaMesh/UI/ParaMeshUI/Resources/Icons/ParaMeshScale', 'ParaMeshDcScaleEditCommand')),
+    (('corpo->comp', 'body->comp', 'body to component'), ('Fusion/UI/FusionUI/Resources/Assembly/CreateComponentFromBody', '')),
+]
+
 def get_feature_image(obj, entity=None):
     match = get_feature_res(obj, entity)
 
@@ -236,6 +245,12 @@ def get_feature_res(obj, entity=None):
         return None
     fusionType = featuremanagerlib.utils.short_class(entity)
     match = FEATURE_RESOURCE_MAP.get(fusionType)
+    if not match and fusionType == 'Feature':
+        name = (obj.name or '').strip().lower()
+        for prefixes, resource in GENERIC_FEATURE_RESOURCE_BY_NAME:
+            if any(name.startswith(prefix) for prefix in prefixes):
+                match = resource
+                break
     if callable(match):
         try:
             match = match(obj)
