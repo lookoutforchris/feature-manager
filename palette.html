@@ -243,18 +243,8 @@ SPDX-License-Identifier: MIT
                 height: 10px;
                 width: 10px;
             }
-            .parents-container, .group-toggle {
+            .group-toggle {
                 min-width: 22px;
-            }
-            .parents-container {
-                display: inline-block;
-            }
-            .parent-bar {
-                display: inline-block;
-                width: 3px;
-                height: 16px;
-                vertical-align: middle;
-                margin-right: 2px;
             }
             .icon {
                 width: 16px;
@@ -314,16 +304,6 @@ SPDX-License-Identifier: MIT
         <div id="context-menu" class="context-menu"></div>
     </body>
     <script>
-    // Can't access the colors from Fusion, so making up our own
-    const COMPONENT_COLORS = [
-        '#e79f53',
-        '#4a51d7',
-        '#6bfcdd',
-        '#54d8f7',
-    ];
-    var colorMap = {};
-    var nextColor = 0;
-
     var collapsedGroups = new Set();
 
     var cancelingEdit = false;
@@ -449,7 +429,6 @@ SPDX-License-Identifier: MIT
                 if (parents && parents.length > 0) {
                     titlePrefix = `Component: ${parents[0]}\n\n`;
                 }
-                addParentBars(listItem, feature, maxParents);
             }
             listItem.title = titlePrefix.trim();
 
@@ -537,35 +516,6 @@ SPDX-License-Identifier: MIT
         marker.classList.add('history-marker');
         marker.addEventListener('mousedown', onMarkerMouseDown);
         return marker;
-    }
-
-    function addParentBars(item, feature, maxParents) {
-        let parentBars = document.createElement('span');
-        parentBars.classList.add('parents-container');
-        parentBars.style.width = maxParents * (3 + 2) + 'px';
-        item.appendChild(parentBars);
-
-        let parents = feature['parent-components'];
-        if (!parents) {
-            return;
-        }
-        for (const parent of parents) {
-            let parentBar = document.createElement('span');
-            parentBar.classList.add('parent-bar')
-            parentBar.title = parent;
-            color = colorMap[parent];
-            if (!color) {
-                if (nextColor >= COMPONENT_COLORS.length) {
-                    color = 'silver';
-                } else {
-                    color = COMPONENT_COLORS[nextColor];
-                    colorMap[parent] = color;
-                    nextColor++;
-                }
-            }
-            parentBar.style.backgroundColor = color;
-            parentBars.appendChild(parentBar);
-        }
     }
 
     function onFeatureNameClick(e) {
