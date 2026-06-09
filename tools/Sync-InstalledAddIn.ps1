@@ -27,8 +27,12 @@ foreach ($item in $items) {
         throw "Required source item does not exist: $source"
     }
 
-    if ($PSCmdlet.ShouldProcess($destination, "copy from $source")) {
-        Copy-Item -LiteralPath $source -Destination $destination -Recurse -Force
+    if ($PSCmdlet.ShouldProcess($destination, "replace with $source")) {
+        if (Test-Path -LiteralPath $destination) {
+            Remove-Item -LiteralPath $destination -Recurse -Force
+        }
+
+        Copy-Item -LiteralPath $source -Destination $InstallPath -Recurse -Force
     }
 }
 
