@@ -4,7 +4,7 @@ Feature Manager is an Autodesk Fusion add-in that adds a left-side, floating
 feature/history manager for timeline features. It is evolving toward a
 SolidWorks-style feature tree while staying inside Fusion's API constraints.
 
-![](screenshot.png)
+![Feature Manager screenshot](screenshot.png?v=1.1.0)
 
 The current codebase is a release-candidate development build. Core interaction
 work is functional in local testing, but larger-file performance and some
