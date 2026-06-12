@@ -18,6 +18,8 @@ import adsk.core, adsk.fusion, adsk.cam, traceback
 from collections import defaultdict
 import json
 import os
+import shutil
+import subprocess
 import sys
 import threading
 
@@ -25,11 +27,28 @@ NAME = 'Feature Manager'
 FILE_DIR = os.path.dirname(os.path.realpath(__file__))
 PALETTE_ID = 'featureManager_palette'
 COMMAND_ID = 'featureManager_toggle'
+HIDE_HORIZONTAL_TIMELINE_COMMAND_ID = 'featureManager_hideHorizontalTimeline'
 INITIAL_PALETTE_REFRESH_EVENT = 'featureManager_initialRefresh'
 PALETTE_DEFAULT_WIDTH = 435
 PALETTE_DEFAULT_HEIGHT = 2000
 PALETTE_MIN_WIDTH = 435
 PALETTE_MIN_HEIGHT = 300
+DOCUMENT_MONITOR_INTERVAL = 1.0
+HORIZONTAL_TIMELINE_OVERLAY_HEIGHT = 44
+HORIZONTAL_TIMELINE_OVERLAY_BOTTOM_INSET = 0
+MAX_AUTO_TIMELINE_ITEMS = 300
+LIGHTWEIGHT_TIMELINE_ITEM_TYPES = (
+    ('sketch', 'Sketch', 'Fusion/UI/FusionUI/Resources/sketch/Sketch_feature'),
+    ('pattern', 'PatternFeature', 'Fusion/UI/FusionUI/Resources/pattern/pattern_rectangular'),
+    ('mirror', 'PatternFeature', 'Fusion/UI/FusionUI/Resources/pattern/pattern_mirror'),
+    ('plane', 'ConstructionPlane', 'Fusion/UI/FusionUI/Resources/construction/plane_offset'),
+    ('axis', 'ConstructionAxis', 'Fusion/UI/FusionUI/Resources/construction/axis_line'),
+    ('point', 'ConstructionPoint', 'Fusion/UI/FusionUI/Resources/construction/point'),
+    ('component', 'Occurrence', 'Fusion/UI/FusionUI/Resources/Assembly/CreateComponentFromBody'),
+    ('copy', 'Occurrence', 'Fusion/UI/FusionUI/Resources/Assembly/CopyPasteInstance'),
+    ('joint', 'Joint', 'Fusion/UI/FusionUI/Resources/Assembly/Joint'),
+)
+LIGHTWEIGHT_DEFAULT_RESOURCE = 'Fusion/UI/FusionUI/Resources/solid/extrude'
 
 # Import relative path to avoid namespace pollution
 from . import featuremanagerlib
@@ -57,6 +76,11 @@ manifest = featuremanagerlib.manifest.read()
 
 html_ready = False
 DEBUG_LOGGING = False
+TRACE_FUSION_COMMANDS = False
+COMMAND_TRACE_IGNORED_IDS = {
+    'SelectCommand',
+    'CommitCommand',
+}
 ALLOWED_FEATURE_COMMANDS = {
     'ConstructionPlaneOffsetFromPlaneCommand',
     'CreateSelectionGroupCmd',
@@ -76,14 +100,59 @@ ALLOWED_FEATURE_COMMANDS = {
 
 timeline_item_count = 0
 timeline_marker_position = -1
+timeline_overlay_process = None
+overlay_polling = False
+overlay_poll_scheduled = False
+palette_refresh_requested = False
+document_transitioning = False
+document_monitor_scheduled = False
+active_document_key = None
+overlay_filter_state = {
+    'search': '',
+    'filters': [],
+}
+overlay_timeline_state = {
+    'markerPosition': -1,
+    'timelineCount': -1,
+    'suppressedCount': 0,
+    'selectedPosition': -1,
+}
 
 settings = featuremanagerlib.settings.SettingsManager(
-    { 'enabled': False }
+    {
+        'enabled': True,
+        'horizontalTimelineHidden': False,
+    }
 )
 
 def debug_log(message):
     if DEBUG_LOGGING:
         print(f'{NAME}: {message}')
+
+def trace_command_event(prefix, event_args):
+    if not TRACE_FUSION_COMMANDS:
+        return
+
+    command_id = getattr(event_args, 'commandId', '')
+    if command_id in COMMAND_TRACE_IGNORED_IDS:
+        return
+
+    command_definition = getattr(event_args, 'commandDefinition', None)
+    command_name = ''
+    resource_folder = ''
+    if command_definition:
+        try:
+            command_name = command_definition.name or ''
+        except Exception:
+            command_name = ''
+        try:
+            resource_folder = command_definition.resourceFolder or ''
+        except Exception:
+            resource_folder = ''
+    if resource_folder:
+        resource_folder = resource_folder.replace(featuremanagerlib.utils.get_fusion_deploy_folder() + '/', '')
+
+    print(f'{NAME} Command Trace: {prefix} id="{command_id}" name="{command_name}" resource="{resource_folder}"')
 
 def get_active_workspace_id():
     try:
@@ -95,11 +164,47 @@ def get_active_workspace_id():
         debug_log(f'activeWorkspace unavailable: {err}')
         return ''
 
+def get_active_document_key():
+    try:
+        document = app.activeDocument
+    except Exception:
+        return ''
+
+    if not document:
+        return ''
+
+    try:
+        name = document.name or ''
+    except Exception:
+        name = ''
+
+    data_file_id = ''
+    try:
+        data_file = document.dataFile
+        if data_file:
+            data_file_id = data_file.id or ''
+    except Exception:
+        data_file_id = ''
+
+    return f'{name}|{data_file_id}'
+
 def get_enabled():
-    return settings['enabled']
+    return settings.settings.get('enabled', False)
 
 def set_enabled(value):
     settings['enabled'] = value
+
+def get_horizontal_timeline_hidden():
+    return settings.settings.get('horizontalTimelineHidden', False)
+
+def set_horizontal_timeline_hidden(value):
+    settings['horizontalTimelineHidden'] = value
+
+def get_overlay_actions_dir():
+    return os.path.join(FILE_DIR, 'overlay-actions')
+
+def get_overlay_state_path():
+    return os.path.join(FILE_DIR, 'overlay_state.json')
 
 # Occurrence types
 OCCURRENCE_UNKNOWN_COMP = 0
@@ -323,6 +428,13 @@ def invalidate(send=True, clear=False, force=False):
     global timeline_item_count
     global timeline_marker_position
     global html_ready
+    global document_transitioning
+
+    if document_transitioning and not clear:
+        if get_active_workspace_id() == 'FusionSolidEnvironment':
+            document_transitioning = False
+        else:
+            return
 
     palette = ui.palettes.itemById(PALETTE_ID)
 
@@ -333,17 +445,29 @@ def invalidate(send=True, clear=False, force=False):
 
     message = ""
     features = []
+    lightweight_mode = False
     max_parents = 0
     visual_timeline_item_count = timeline_item_count
     visual_marker_position = timeline_marker_position
     if not clear:
         timeline_status, timeline = featuremanagerlib.timeline.get_timeline()
         if timeline_status == TIMELINE_STATUS_OK:
-            timeline_item_count = timeline.count
-            timeline_marker_position = timeline.markerPosition
-            visual_timeline_item_count = get_visual_marker_position(timeline, timeline.count)
-            visual_marker_position = get_visual_marker_position(timeline, timeline_marker_position)
-            features, max_parents = get_features(timeline)
+            design = adsk.fusion.Design.cast(app.activeProduct)
+            if is_stale_timeline_for_empty_design(timeline, design):
+                timeline_item_count = -1
+                timeline_marker_position = -1
+                visual_timeline_item_count = -1
+                visual_marker_position = -1
+            else:
+                timeline_item_count = timeline.count
+                timeline_marker_position = timeline.markerPosition
+                visual_timeline_item_count = get_visual_marker_position(timeline, timeline.count)
+                visual_marker_position = get_visual_marker_position(timeline, timeline_marker_position)
+                if timeline.count > MAX_AUTO_TIMELINE_ITEMS:
+                    features, max_parents = get_lightweight_features(timeline)
+                    lightweight_mode = True
+                else:
+                    features, max_parents = get_features(timeline)
         elif timeline_status == TIMELINE_STATUS_PRODUCT_NOT_READY:
             timeline_item_count = -1
             timeline_marker_position = -1
@@ -366,7 +490,11 @@ def invalidate(send=True, clear=False, force=False):
          'message': message,
          'marker-position': visual_marker_position,
          'timeline-count': visual_timeline_item_count,
+         'suppressed-count': count_suppressed_features(features),
+         'feature-filters': overlay_filter_state,
+         'lightweight-mode': lightweight_mode,
     }
+    write_overlay_state(data)
 
     if not send:
         # Cannot do sendInfoToHTML inside the HTML event handler. We either have to use htmlArgs.returnData or
@@ -376,6 +504,118 @@ def invalidate(send=True, clear=False, force=False):
     else:
         debug_log(f'sending timeline update features={len(features)} message="{message}"')
         palette.sendInfoToHTML('setTimeline', json.dumps(data))
+
+def reset_timeline_state():
+    global timeline_item_count
+    global timeline_marker_position
+    global timeline_cache_tree
+    global timeline_cache_map
+
+    timeline_item_count = -1
+    timeline_marker_position = -1
+    timeline_cache_tree = None
+    timeline_cache_map = None
+    clear_overlay_selected_position()
+
+    data = get_empty_timeline_data()
+    write_overlay_state(data)
+    return data
+
+def clear_palette_timeline():
+    data = reset_timeline_state()
+
+    palette = ui.palettes.itemById(PALETTE_ID)
+    if not palette:
+        return
+
+    try:
+        palette.sendInfoToHTML('setTimeline', json.dumps(data))
+    except Exception as err:
+        debug_log(f'failed to clear palette timeline: {err}')
+
+def get_empty_timeline_data():
+    return {
+         'features': [],
+         'max-parents': 0,
+         'menu-icons': {},
+         'message': '',
+         'marker-position': -1,
+         'timeline-count': -1,
+         'suppressed-count': 0,
+         'feature-filters': overlay_filter_state,
+         'lightweight-mode': False,
+    }
+
+def get_empty_timeline_command():
+    data = get_empty_timeline_data()
+    write_overlay_state(data)
+    return {'action': 'setTimeline', 'data': data}
+
+def count_suppressed_features(features):
+    count = 0
+    for feature in features:
+        if feature.get('type') != 'GROUP' and feature.get('suppressed'):
+            count += 1
+        count += count_suppressed_features(feature.get('children', []))
+    return count
+
+def write_overlay_state(timeline_data=None):
+    global overlay_timeline_state
+
+    if timeline_data is not None:
+        timeline_count = timeline_data.get('timeline-count', -1)
+        selected_position = timeline_data.get(
+            'selected-position',
+            overlay_timeline_state.get('selectedPosition', -1))
+        if timeline_count < 0 or selected_position > timeline_count:
+            selected_position = -1
+        overlay_timeline_state = {
+            'markerPosition': timeline_data.get('marker-position', -1),
+            'timelineCount': timeline_count,
+            'suppressedCount': timeline_data.get('suppressed-count', 0),
+            'selectedPosition': selected_position,
+        }
+
+    state = {
+        'markerPosition': overlay_timeline_state.get('markerPosition', -1),
+        'timelineCount': overlay_timeline_state.get('timelineCount', -1),
+        'suppressedCount': overlay_timeline_state.get('suppressedCount', 0),
+        'selectedPosition': overlay_timeline_state.get('selectedPosition', -1),
+        'search': overlay_filter_state.get('search', ''),
+        'filters': overlay_filter_state.get('filters', []),
+    }
+    try:
+        with open(get_overlay_state_path(), 'w', encoding='utf-8') as f:
+            json.dump(state, f)
+    except Exception as err:
+        debug_log(f'failed to write overlay state: {err}')
+
+def clear_overlay_selected_position():
+    overlay_timeline_state['selectedPosition'] = -1
+    write_overlay_state()
+
+def set_overlay_selected_position(feature_ids):
+    overlay_timeline_state['selectedPosition'] = get_overlay_selected_position(feature_ids)
+    write_overlay_state()
+
+def get_overlay_selected_position(feature_ids):
+    if not feature_ids or not timeline_cache_map:
+        return -1
+
+    try:
+        feature_id = int(feature_ids[-1])
+    except Exception:
+        return -1
+
+    node = timeline_cache_map.get(feature_id)
+    if not node or node.marker_position is None:
+        return -1
+
+    timeline_count = overlay_timeline_state.get('timelineCount', -1)
+    selected_position = node.marker_position + 1
+    if timeline_count >= 0:
+        selected_position = min(selected_position, timeline_count)
+    return max(1, selected_position)
 
 class TimelineObjectNode:
     def __init__(self, obj, id, marker_position=None):
@@ -424,6 +664,53 @@ def get_features(timeline):
 
     return get_features_from_node(timeline_cache_tree, component_parent_map)
 
+def get_lightweight_features(timeline):
+    global timeline_cache_tree, timeline_cache_map
+    flat_timeline = featuremanagerlib.timeline.flatten_timeline(timeline)
+    timeline_cache_tree, timeline_cache_map = build_timeline_tree(flat_timeline)
+    return get_lightweight_features_from_node(timeline_cache_tree)
+
+def get_lightweight_features_from_node(timeline_tree_node):
+    features = []
+    max_parents = 0
+    for child_node in timeline_tree_node.children:
+        obj = child_node.obj
+        feature = {
+            'id': str(child_node.id),
+            'name': obj.name,
+            'suppressed': obj.isSuppressed,
+            'rolledBack': obj.isRolledBack,
+            'marker-position': child_node.marker_position,
+            'marker-after-position': child_node.marker_after_position,
+            'lightweight': True,
+        }
+        feature.update(get_timeline_object_health(obj))
+
+        if child_node.children:
+            feature['type'] = 'GROUP'
+            feature['image'] = get_fusion_resource_file('Neutron/UI/Base/Resources/Folder/folder.png')
+            feature['expanded-image'] = get_fusion_resource_file('Neutron/UI/Base/Resources/Palette/TipsAndTricks/10x10-ArrowDown@2x.png')
+            feature['collapsed-image'] = get_fusion_resource_file('Neutron/UI/Base/Resources/Palette/TipsAndTricks/10x10-ArrowRight@2x.png')
+            feature['collapsed'] = obj.isCollapsed
+            feature['children'], group_max_parents = get_lightweight_features_from_node(child_node)
+            if group_max_parents > max_parents:
+                max_parents = group_max_parents
+        else:
+            lightweight_type, image_resource = get_lightweight_feature_type_and_resource(obj.name)
+            feature['type'] = lightweight_type
+            feature['image'] = get_image_path(image_resource)
+
+        features.append(feature)
+
+    return (features, max_parents)
+
+def get_lightweight_feature_type_and_resource(name):
+    normalized_name = (name or '').lower()
+    for marker, feature_type, image_resource in LIGHTWEIGHT_TIMELINE_ITEM_TYPES:
+        if marker in normalized_name:
+            return feature_type, image_resource
+    return 'TimelineFeature', LIGHTWEIGHT_DEFAULT_RESOURCE
+
 def get_features_from_node(timeline_tree_node, component_parent_map):
     features = []
     max_parents = 0
@@ -438,6 +725,7 @@ def get_features_from_node(timeline_tree_node, component_parent_map):
             'marker-position': child_node.marker_position,
             'marker-after-position': child_node.marker_after_position,
             }
+        feature.update(get_timeline_object_health(obj))
 
         # Might there be empty groups?
         if child_node.children:
@@ -488,6 +776,26 @@ def get_features_from_node(timeline_tree_node, component_parent_map):
         features.append(feature)
 
     return (features, max_parents)
+
+def get_timeline_object_health(obj):
+    try:
+        health_state = obj.healthState
+    except Exception:
+        return {}
+
+    health = {}
+    if health_state == adsk.fusion.FeatureHealthStates.WarningFeatureHealthState:
+        health['health-state'] = 'warning'
+    elif health_state == adsk.fusion.FeatureHealthStates.ErrorFeatureHealthState:
+        health['health-state'] = 'error'
+    else:
+        return health
+
+    try:
+        health['health-message'] = obj.errorOrWarningMessage or ''
+    except Exception:
+        health['health-message'] = ''
+    return health
 
 def get_feature_parent_path(component_parent_map, obj, feature=None):
     design = app.activeProduct
@@ -605,6 +913,35 @@ def get_component_parent_map():
 
     return component_parent_map
 
+def is_stale_timeline_for_empty_design(timeline, design):
+    if not timeline or timeline.count == 0 or not design:
+        return False
+
+    try:
+        root = design.rootComponent
+    except Exception:
+        return False
+
+    collection_names = [
+        'bRepBodies',
+        'meshBodies',
+        'sketches',
+        'occurrences',
+        'constructionPlanes',
+        'constructionAxes',
+        'constructionPoints',
+    ]
+    for collection_name in collection_names:
+        try:
+            collection = getattr(root, collection_name)
+            if collection and collection.count > 0:
+                return False
+        except Exception:
+            pass
+
+    debug_log('ignoring nonempty timeline because active design is empty')
+    return True
+
 def parent_map_occurrence(component_parent_map, parent_name, occurrences):
     for occurrence in occurrences:
         name = occurrence.component.name
@@ -650,35 +987,70 @@ def run(context):
                 'A vertical feature manager for Fusion timeline features.',
                 './resources/featuremanager')
 
-            events_manager.add_handler(toggle_palette_cmd_def.commandCreated,
-                        adsk.core.CommandCreatedEventHandler,
-                        toggle_palette_command_created_handler)
-        
+        events_manager.add_handler(toggle_palette_cmd_def.commandCreated,
+                    adsk.core.CommandCreatedEventHandler,
+                    toggle_palette_command_created_handler)
+
         # Add the command to the View menu
         view_drop_down = get_view_drop_down()
+
+        # Recreate this command to clear any stale checkbox definition from
+        # earlier experiments.
+        timeline_cntrl = view_drop_down.controls.itemById(HIDE_HORIZONTAL_TIMELINE_COMMAND_ID)
+        if timeline_cntrl:
+            timeline_cntrl.deleteMe()
+        hide_horizontal_timeline_cmd_def = ui.commandDefinitions.itemById(
+            HIDE_HORIZONTAL_TIMELINE_COMMAND_ID)
+        if hide_horizontal_timeline_cmd_def:
+            hide_horizontal_timeline_cmd_def.deleteMe()
+
+        hide_horizontal_timeline_cmd_def = ui.commandDefinitions.addButtonDefinition(
+            HIDE_HORIZONTAL_TIMELINE_COMMAND_ID,
+            'Toggle Horizontal Timeline',
+            'Show or hide Fusion\'s native bottom timeline using the Feature Manager bottom bar.')
+
+        events_manager.add_handler(hide_horizontal_timeline_cmd_def.commandCreated,
+                    adsk.core.CommandCreatedEventHandler,
+                    hide_horizontal_timeline_command_created_handler)
         
         cntrl = view_drop_down.controls.itemById(COMMAND_ID)
         if not cntrl:
             view_drop_down.controls.addCommand(toggle_palette_cmd_def,
                                                'SeparatorAfter_DashboardModeCloseCommand', False) 
+        timeline_cntrl = view_drop_down.controls.itemById(HIDE_HORIZONTAL_TIMELINE_COMMAND_ID)
+        if not timeline_cntrl:
+            view_drop_down.controls.addCommand(hide_horizontal_timeline_cmd_def,
+                                               COMMAND_ID, False)
         
         events_manager.add_handler(ui.commandTerminated,
                     adsk.core.ApplicationCommandEventHandler,
                     command_terminated_handler)
 
-        # Edit command tracing
-        # def f(args):
-        #     print(args.commandId)
-        #     args.isCanceled = True
-        # events_manager.add_handler(ui.commandStarting,
-        #             adsk.core.ApplicationCommandEventHandler,
-        #             f)
+        events_manager.add_handler(ui.commandStarting,
+                    adsk.core.ApplicationCommandEventHandler,
+                    command_starting_handler)
 
         # Fusion bug: Activated is not called when switching to/from Drawing.
         # https://forums.autodesk.com/t5/fusion-360-api-and-scripts/api-bug-application-documentactivated-event-do-not-raise/m-p/9020750
         events_manager.add_handler(app.documentActivated,
                     adsk.core.DocumentEventHandler,
                     document_activated_handler)
+
+        events_manager.add_handler(app.documentActivating,
+                    adsk.core.DocumentEventHandler,
+                    document_activating_handler)
+
+        events_manager.add_handler(app.documentDeactivating,
+                    adsk.core.DocumentEventHandler,
+                    document_deactivating_handler)
+
+        events_manager.add_handler(app.documentClosing,
+                    adsk.core.DocumentEventHandler,
+                    document_closing_handler)
+
+        events_manager.add_handler(app.documentClosed,
+                    adsk.core.DocumentEventHandler,
+                    document_closed_handler)
 
         events_manager.add_handler(ui.workspacePreDeactivate,
                     adsk.core.WorkspaceEventHandler,
@@ -698,6 +1070,10 @@ def run(context):
         # Show palette when user starts the add-in manually
         if get_enabled() and app.isStartupComplete:
             show_palette()
+            schedule_document_monitor()
+        if get_horizontal_timeline_hidden() and app.isStartupComplete:
+            start_horizontal_timeline_overlay()
+        adsk.autoTerminate(False)
 
 def stop(context):
     with error_catcher:
@@ -709,6 +1085,7 @@ def stop(context):
         palette = ui.palettes.itemById(PALETTE_ID)
         if palette:
             palette.deleteMe()
+        stop_horizontal_timeline_overlay()
 
         # Delete controls and associated command definitions created by this add-ins
         view_drop_down = get_view_drop_down()
@@ -718,6 +1095,13 @@ def stop(context):
         cmdDef = ui.commandDefinitions.itemById(COMMAND_ID)
         if cmdDef:
             cmdDef.deleteMe()
+        timeline_cntrl = view_drop_down.controls.itemById(HIDE_HORIZONTAL_TIMELINE_COMMAND_ID)
+        if timeline_cntrl:
+            timeline_cntrl.deleteMe()
+        timeline_cmd_def = ui.commandDefinitions.itemById(HIDE_HORIZONTAL_TIMELINE_COMMAND_ID)
+        if timeline_cmd_def:
+            timeline_cmd_def.deleteMe()
+        adsk.terminate()
 
 def toggle_palette_command_execute_handler(args):
     enable = not get_enabled()
@@ -731,6 +1115,221 @@ def toggle_palette_command_execute_handler(args):
                         'It will be shown when you open a Design.')
     else:
         hide_palette()
+
+def hide_horizontal_timeline_command_execute_handler(args):
+    hidden = not get_horizontal_timeline_hidden()
+
+    if hidden and not is_horizontal_timeline_overlay_supported():
+        set_horizontal_timeline_hidden(False)
+        ui.messageBox('Toggle Horizontal Timeline is only supported on Windows.')
+        return
+
+    set_horizontal_timeline_hidden(hidden)
+    debug_log(f'hide horizontal timeline={hidden}')
+    if hidden:
+        started = start_horizontal_timeline_overlay()
+        if not started:
+            set_horizontal_timeline_hidden(False)
+            ui.messageBox('Failed to start the horizontal timeline overlay.')
+    else:
+        stop_horizontal_timeline_overlay()
+
+def is_horizontal_timeline_overlay_supported():
+    return os.name == 'nt'
+
+def get_powershell_executable():
+    program_files = os.environ.get('ProgramFiles', r'C:\Program Files')
+    bundled_pwsh = os.path.join(program_files, 'PowerShell', '7', 'pwsh.exe')
+    if os.path.exists(bundled_pwsh):
+        return bundled_pwsh
+
+    for executable in ('pwsh.exe', 'powershell.exe'):
+        found = shutil.which(executable)
+        if found:
+            return found
+
+    return None
+
+def is_horizontal_timeline_overlay_running():
+    return (timeline_overlay_process is not None and
+            timeline_overlay_process.poll() is None)
+
+def start_horizontal_timeline_overlay():
+    global timeline_overlay_process
+
+    if not is_horizontal_timeline_overlay_supported():
+        return False
+    if is_horizontal_timeline_overlay_running():
+        start_overlay_polling()
+        return True
+
+    powershell = get_powershell_executable()
+    overlay_script = os.path.join(FILE_DIR, 'timeline_overlay.ps1')
+    if not powershell or not os.path.exists(overlay_script):
+        print(f'{NAME}: missing overlay dependency powershell="{powershell}" script="{overlay_script}"')
+        return False
+
+    args = [
+        powershell,
+        '-NoProfile',
+        '-Sta',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        overlay_script,
+        '-OverlayHeight',
+        str(HORIZONTAL_TIMELINE_OVERLAY_HEIGHT),
+        '-BottomInset',
+        str(HORIZONTAL_TIMELINE_OVERLAY_BOTTOM_INSET),
+        '-TimelineResourceFolder',
+        os.path.join(featuremanagerlib.utils.get_fusion_deploy_folder(),
+                     'Fusion', 'UI', 'FusionUI', 'Resources', 'Timeline'),
+        '-FusionDeployFolder',
+        featuremanagerlib.utils.get_fusion_deploy_folder(),
+    ]
+    creationflags = 0
+    if hasattr(subprocess, 'CREATE_NO_WINDOW'):
+        creationflags = subprocess.CREATE_NO_WINDOW
+
+    timeline_overlay_process = subprocess.Popen(args, creationflags=creationflags)
+    write_overlay_state()
+    start_overlay_polling()
+    return True
+
+def stop_horizontal_timeline_overlay():
+    global timeline_overlay_process
+
+    if not timeline_overlay_process:
+        return
+
+    if timeline_overlay_process.poll() is None:
+        timeline_overlay_process.terminate()
+    timeline_overlay_process = None
+    stop_overlay_polling()
+
+def start_overlay_polling():
+    global overlay_polling
+
+    if overlay_polling:
+        return
+    overlay_polling = True
+    schedule_overlay_poll(0.75)
+
+def stop_overlay_polling():
+    global overlay_polling
+    global overlay_poll_scheduled
+
+    overlay_polling = False
+    overlay_poll_scheduled = False
+
+def schedule_overlay_poll(delay_seconds=0.75):
+    global overlay_poll_scheduled
+
+    if not overlay_polling:
+        return
+    if overlay_poll_scheduled:
+        return
+    overlay_poll_scheduled = True
+    threading.Timer(delay_seconds, app.fireCustomEvent,
+                    args=[INITIAL_PALETTE_REFRESH_EVENT]).start()
+
+def process_overlay_actions():
+    actions_dir = get_overlay_actions_dir()
+    if not os.path.isdir(actions_dir):
+        return
+
+    for filename in sorted(os.listdir(actions_dir)):
+        if not filename.lower().endswith('.json'):
+            continue
+        path = os.path.join(actions_dir, filename)
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                command = json.load(f)
+            os.remove(path)
+        except Exception as err:
+            debug_log(f'failed to read overlay action "{filename}": {err}')
+            continue
+
+        handle_overlay_action(command)
+
+def handle_overlay_action(command):
+    action = command.get('action')
+    data = command.get('data') or {}
+    debug_log(f'overlay action={action}')
+
+    if action == 'timeline.begin':
+        run_timeline_transport_action('begin')
+    elif action == 'timeline.previous':
+        run_timeline_transport_action('previous')
+    elif action == 'timeline.play':
+        # Fusion's Timeline.play() advances to the end too quickly for this
+        # overlay. The overlay owns animated playback by sending timeline.next
+        # ticks instead.
+        run_timeline_transport_action('next')
+    elif action == 'timeline.next':
+        run_timeline_transport_action('next')
+    elif action == 'timeline.end':
+        run_timeline_transport_action('end')
+    elif action == 'featureFilters.changed':
+        set_overlay_feature_filters(data)
+
+def run_timeline_transport_action(action):
+    timeline_status, timeline = featuremanagerlib.timeline.get_timeline()
+    if timeline_status != TIMELINE_STATUS_OK:
+        return
+
+    try:
+        if action == 'begin':
+            timeline.moveToBeginning()
+        elif action == 'previous':
+            timeline.moveToPreviousStep()
+        elif action == 'next':
+            timeline.movetoNextStep()
+        elif action == 'end':
+            timeline.moveToEnd()
+        else:
+            return
+    except Exception as err:
+        debug_log(f'timeline transport action "{action}" failed: {err}')
+        return
+
+    clear_overlay_selected_position()
+    schedule_palette_refresh([0.05, 0.25])
+
+def move_visual_marker(delta):
+    timeline_status, timeline = featuremanagerlib.timeline.get_timeline()
+    if timeline_status != TIMELINE_STATUS_OK:
+        return
+    current_position = get_visual_marker_position(timeline, timeline.markerPosition)
+    set_visual_marker_position(current_position + delta)
+
+def set_visual_marker_position(visual_marker_position):
+    timeline_status, timeline = featuremanagerlib.timeline.get_timeline()
+    if timeline_status != TIMELINE_STATUS_OK:
+        return
+    visual_marker_position = max(0, min(int(visual_marker_position),
+                                        get_visual_marker_position(timeline, timeline.count)))
+    timeline.markerPosition = get_native_marker_position(timeline, visual_marker_position)
+    clear_overlay_selected_position()
+    schedule_palette_refresh([0.05, 0.25])
+
+def set_overlay_feature_filters(data):
+    global overlay_filter_state
+
+    search = str(data.get('search', ''))
+    filters = data.get('filters') or []
+    if not isinstance(filters, list):
+        filters = []
+    filters = [str(filter_name) for filter_name in filters]
+    overlay_filter_state = {
+        'search': search,
+        'filters': filters,
+    }
+    write_overlay_state()
+
+    palette = ui.palettes.itemById(PALETTE_ID)
+    if palette:
+        palette.sendInfoToHTML('setFeatureFilters', json.dumps(overlay_filter_state))
 
 def show_palette():
     global html_ready
@@ -759,6 +1358,7 @@ def show_palette():
         invalidate()
         if not palette.isVisible:
             palette.isVisible = True
+    schedule_document_monitor()
 
 def hide_palette():
     palette = ui.palettes.itemById(PALETTE_ID)
@@ -814,19 +1414,28 @@ def build_selection(entity, design, use_body_fallback=False):
 
     return selection
 
+def set_active_selection(selection):
+    active_selections = getattr(ui, 'activeSelections', None)
+    if active_selections is None:
+        return False, 'No active selection context'
+
+    active_selections.all = selection
+    return True, None
+
+def clear_active_selection():
+    return set_active_selection(adsk.core.ObjectCollection.create())
+
 def select_timeline_entity(entity, design):
     selection = build_selection(entity, design)
     try:
-        ui.activeSelections.all = selection
-        return True, None
+        return set_active_selection(selection)
     except Exception as first_error:
         fallback_selection = build_selection(entity, design, use_body_fallback=True)
         if fallback_selection.count == 0:
             return False, first_error
 
     try:
-        ui.activeSelections.all = fallback_selection
-        return True, None
+        return set_active_selection(fallback_selection)
     except Exception as fallback_error:
         return False, fallback_error
 
@@ -852,8 +1461,7 @@ def select_timeline_entities(feature_ids, design):
     if selection.count == 0:
         return False, 'No selectable entities found'
     try:
-        ui.activeSelections.all = selection
-        return True, None
+        return set_active_selection(selection)
     except Exception as first_error:
         fallback_selection, fallback_skipped = build_selection_for_timeline_ids(
             feature_ids, design, use_body_fallback=True)
@@ -861,8 +1469,7 @@ def select_timeline_entities(feature_ids, design):
             return False, first_error
 
     try:
-        ui.activeSelections.all = fallback_selection
-        return True, None
+        return set_active_selection(fallback_selection)
     except Exception as fallback_error:
         return False, fallback_error
 
@@ -1006,18 +1613,56 @@ def schedule_initial_palette_refresh():
     schedule_palette_refresh([0.5, 1.5, 3.0])
 
 def schedule_palette_refresh(delays):
+    global palette_refresh_requested
+
+    palette_refresh_requested = True
     for delay_seconds in delays:
         threading.Timer(delay_seconds, app.fireCustomEvent,
                         args=[INITIAL_PALETTE_REFRESH_EVENT]).start()
 
+def schedule_document_monitor():
+    return
+
+def check_active_document_changed():
+    global active_document_key
+    global document_transitioning
+
+    current_document_key = get_active_document_key()
+    if active_document_key is None:
+        active_document_key = current_document_key
+        return False
+
+    if current_document_key == active_document_key:
+        return False
+
+    debug_log(f'active document changed from "{active_document_key}" to "{current_document_key}"')
+    active_document_key = current_document_key
+    document_transitioning = True
+    clear_palette_timeline()
+    schedule_palette_refresh([0.5, 1.5, 3.0])
+    return True
+
 def initial_palette_refresh_handler(args):
     global html_ready
+    global overlay_poll_scheduled
+    global palette_refresh_requested
+    global document_monitor_scheduled
+
+    overlay_poll_scheduled = False
+    document_monitor_scheduled = False
+    process_overlay_actions()
+    if overlay_polling:
+        schedule_overlay_poll(0.75)
+
     palette = ui.palettes.itemById(PALETTE_ID)
     if not palette:
         return
 
+    should_refresh = palette_refresh_requested or not html_ready
+    palette_refresh_requested = False
     html_ready = True
-    invalidate(force=True)
+    if should_refresh:
+        invalidate(force=True)
 
 def update_feature_by_id(features, feature_id, values):
     for feature in features:
@@ -1034,6 +1679,12 @@ def toggle_palette_command_created_handler(args):
     events_manager.add_handler(command.execute,
                                 adsk.core.CommandEventHandler,
                                 toggle_palette_command_execute_handler)
+
+def hide_horizontal_timeline_command_created_handler(args):
+    command = args.command
+    events_manager.add_handler(command.execute,
+                                adsk.core.CommandEventHandler,
+                                hide_horizontal_timeline_command_execute_handler)
 
 # Event handler for the palette close event.
 def palette_closed_handler(args):
@@ -1054,7 +1705,8 @@ def palette_incoming_from_html_handler(args):
 
         # Cannot do sendInfoToHTML inside the event handler. We either have to use htmlArgs.returnData or
         # spawn a thread (does not seem very safe? Can we call into the event loop instead?).
-        html_commands.append(invalidate(send=False))
+        timeline_command = invalidate(send=False, force=True)
+        html_commands.append(timeline_command or get_empty_timeline_command())
     elif action == 'setFeatureName':
         node = timeline_cache_map[data['id']]
         obj = node.obj
@@ -1077,19 +1729,23 @@ def palette_incoming_from_html_handler(args):
         feature_ids = data.get('ids')
         if feature_ids is None:
             feature_ids = [data['id']]
+        if action == 'selectFeature' or action == 'selectFeatures':
+            set_overlay_selected_position(feature_ids)
         ret = True
 
         design: adsk.fusion.Design = app.activeProduct
-        if action == 'selectFeatures':
+        if len(feature_ids) > 0 and not timeline_cache_map:
+            ret = False
+        elif action == 'selectFeatures':
             if len(feature_ids) == 0:
-                ui.activeSelections.all = adsk.core.ObjectCollection.create()
+                clear_active_selection()
             else:
                 ret, selection_error = select_timeline_entities(feature_ids, design)
                 if not ret:
                     # Palette rows such as timeline groups are valid UI selections
                     # but do not map to selectable Fusion entities. Keep the local
                     # row highlight and clear Fusion's active selection silently.
-                    ui.activeSelections.all = adsk.core.ObjectCollection.create()
+                    clear_active_selection()
                     ret = True
         else:
             node = timeline_cache_map[feature_ids[0]]
@@ -1260,6 +1916,10 @@ def palette_incoming_from_html_handler(args):
 
 def command_terminated_handler(args):
     eventArgs = adsk.core.ApplicationCommandEventArgs.cast(args)
+    trace_command_event('terminated', eventArgs)
+
+    if document_transitioning:
+        return
 
     # As long as we don't update on command create, we only need to listen for command completion
     # Except Undo, which has a "Cancel" termination reason.
@@ -1275,6 +1935,10 @@ def command_terminated_handler(args):
         return
     
     invalidate()
+
+def command_starting_handler(args):
+    eventArgs = adsk.core.ApplicationCommandEventArgs.cast(args)
+    trace_command_event('starting', eventArgs)
 
 def trace_feature_image(command_terminated_event_args):
     ''' Development function to trace feature images '''
@@ -1308,28 +1972,72 @@ def trace_feature_image(command_terminated_event_args):
 
 def workspace_pre_deactivate_handler(args):
     #eventArgs = adsk.core.DocumentEventArgs.cast(args)
+    global document_transitioning
+
     debug_log('workspace pre-deactivate')
-    if get_enabled():
-        invalidate(clear=True)
+    document_transitioning = True
+    reset_timeline_state()
+    stop_horizontal_timeline_overlay()
 
 def workspace_activated_handler(args):
     #eventArgs = adsk.core.WorkspaceEventArgs.cast(args)
+    global document_transitioning
 
     active_workspace_id = get_active_workspace_id()
     debug_log(f'workspace activated id="{active_workspace_id}"')
     if active_workspace_id == 'FusionSolidEnvironment':
+        document_transitioning = False
         if get_enabled():
             show_palette()
     else:
         # Deactivate
+        document_transitioning = True
+        reset_timeline_state()
         hide_palette()
+
+def document_activating_handler(args):
+    global document_transitioning
+
+    debug_log('document activating')
+    document_transitioning = True
+    reset_timeline_state()
+
+def document_deactivating_handler(args):
+    global document_transitioning
+
+    debug_log('document deactivating')
+    document_transitioning = True
+    reset_timeline_state()
 
 def document_activated_handler(args):
     #eventArgs = adsk.core.DocumentEventArgs.cast(args)
+    global document_transitioning
+    global active_document_key
+
     active_workspace_id = get_active_workspace_id()
     debug_log(f'document activated workspace id="{active_workspace_id}"')
     if active_workspace_id == 'FusionSolidEnvironment':
+        document_transitioning = False
+        active_document_key = get_active_document_key()
         if get_enabled():
             show_palette()
+            schedule_initial_palette_refresh()
+
+def document_closing_handler(args):
+    global document_transitioning
+
+    debug_log('document closing')
+    document_transitioning = True
+    reset_timeline_state()
+    stop_horizontal_timeline_overlay()
+
+def document_closed_handler(args):
+    global document_transitioning
+    global timeline_item_count
+    global timeline_marker_position
+
+    debug_log('document closed')
+    document_transitioning = True
+    reset_timeline_state()
 
 #########################################################################################

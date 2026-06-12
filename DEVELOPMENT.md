@@ -10,6 +10,26 @@ git clone https://github.com/lookoutforchris/feature-manager.git
 
 Expected working files include `FeatureManager.py`, `FeatureManager.manifest`, `palette.html`, `resources/`, and `featuremanagerlib/`.
 
+## VS Code and Codex
+
+Use the checked-in VS Code workspace file:
+
+```powershell
+code .\feature-manager.code-workspace
+```
+
+Codex can continue work from either the desktop app or the VS Code extension. If resuming an existing Codex session in VS Code works, prefer that because it preserves discussion context. If a fresh VS Code thread is needed, start it from the repository root so Codex loads `AGENTS.md`, `.codex/config.toml`, and the planning documents.
+
+For VS Code Codex MCP access, make sure:
+
+1. Fusion is running.
+2. Fusion preferences have **Fusion MCP Server** enabled.
+3. The Fusion MCP URL is `http://127.0.0.1:27182/mcp`.
+4. The project is trusted by Codex so project `.codex/config.toml` is loaded.
+5. A smoke check with `fusion_mcp_read` can list the active Fusion document.
+
+Codex MCP configuration is project-scoped in `.codex/config.toml`; it is not `.mcp.json`.
+
 ## Install in Fusion
 
 For the current Windows Fusion setup, install or copy this folder to:
@@ -34,13 +54,15 @@ Preview the copy operations first:
 .\tools\Sync-InstalledAddIn.ps1 -WhatIf
 ```
 
-The sync script copies only add-in runtime files: `FeatureManager.py`, `FeatureManager.manifest`, `palette.html`, `resources/`, and `featuremanagerlib/`. It does not copy planning docs, `.git`, `.codex`, or the installed add-in's `settings.json`.
+The sync script copies only add-in runtime files: `FeatureManager.py`, `FeatureManager.manifest`, `palette.html`, `timeline_overlay.ps1`, `resources/`, and `featuremanagerlib/`. It does not copy planning docs, `.git`, `.codex`, or the installed add-in's `settings.json`.
 
 ## Run and Stop
 
 Open Fusion, then use `Shift+S` to open **Scripts and Add-Ins**. On the **Add-Ins** tab, select `FeatureManager` and press **Run**. Use **Stop** from the same dialog to unload it.
 
-The add-in registers a **Toggle Feature Manager** command under the Fusion **File > View** menu. If the add-in setting is enabled and Fusion startup is complete, startup attempts to show the palette automatically.
+The add-in registers **Toggle Feature Manager** and **Toggle Horizontal Timeline** commands under the Fusion **File > View** menu. If the add-in setting is enabled and Fusion startup is complete, startup attempts to show the palette automatically. On Windows, **Toggle Horizontal Timeline** starts a Fusion-owned WPF bottom bar from `timeline_overlay.ps1`; this visually covers the native bottom timeline without disabling parametric history.
+
+The bottom bar currently provides timeline transport controls, feature type filters, a feature search field, and timeline status text. The WPF helper writes JSON action files under `overlay-actions/`; the Fusion Python add-in drains those actions through the existing refresh event and remains the only code that calls Fusion APIs. The Python add-in writes `overlay_state.json` so the WPF helper can display marker, timeline count, suppressed count, search, and filter state.
 
 ## Event Flow
 
@@ -77,6 +99,7 @@ Runtime verification requires Fusion:
 5. Toggle the Feature Manager palette.
 6. Confirm timeline entries populate and interactions can be exercised.
 7. Confirm transparent empty areas show the Fusion canvas below, while row text, context menus, and marker controls remain readable and interactive.
+8. Use **File > View > Toggle Horizontal Timeline** and confirm the bottom bar appears, follows the Fusion window, does not cover other apps, and can move the timeline marker with previous/end controls.
 
 Fusion MCP smoke check:
 

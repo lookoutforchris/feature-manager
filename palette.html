@@ -77,6 +77,17 @@ SPDX-License-Identifier: MIT
             #message:empty {
                 display: none;
             }
+            #mode-badge {
+                color: #d7dde7;
+                display: none;
+                font-size: 11px;
+                margin: 4px 8px 2px 8px;
+                opacity: 0.75;
+                white-space: nowrap;
+            }
+            body.lightweight-mode #mode-badge {
+                display: block;
+            }
             .feature {
                 align-items: center;
                 background-color: transparent;
@@ -103,8 +114,21 @@ SPDX-License-Identifier: MIT
             .feature.context-menu-source .feature-label {
                 background-color: #3f4a5d;
             }
+            .feature.health-warning .feature-label {
+                box-shadow: inset 3px 0 0 #d6a13a;
+            }
+            .feature.health-error .feature-label {
+                box-shadow: inset 3px 0 0 #d95d5d;
+            }
             .feature.drag-source {
                 opacity: 0.5;
+            }
+            .feature.filtered-out,
+            .feature-group.filtered-out {
+                display: none;
+            }
+            body.filtering .marker-drop-zone {
+                display: none;
             }
             .context-menu {
                 background-color: #46546a;
@@ -275,6 +299,25 @@ SPDX-License-Identifier: MIT
                 color: #111111;
                 outline: none;
             }
+            .health-badge {
+                align-items: center;
+                border-radius: 50%;
+                display: inline-flex;
+                font-size: 10px;
+                font-weight: bold;
+                height: 14px;
+                justify-content: center;
+                margin-left: 6px;
+                min-width: 14px;
+            }
+            .health-badge.warning {
+                background-color: #d6a13a;
+                color: #151515;
+            }
+            .health-badge.error {
+                background-color: #d95d5d;
+                color: #ffffff;
+            }
             .suppressed .feature-label {
                 opacity: 0.5;
             }
@@ -296,6 +339,7 @@ SPDX-License-Identifier: MIT
                 <div id="message">
                     Loading...
                 </div>
+                <div id="mode-badge"></div>
                 <div id="timeline">
                     
                 </div>
@@ -319,6 +363,7 @@ SPDX-License-Identifier: MIT
     var draggedFeatureItem = null;
     var pendingFeatureDrag = null;
     var suppressNextFeatureClick = false;
+    var featureFilterState = { search: '', filters: [] };
 
     window.fusionJavaScriptHandler = {handle: function(action, jsonData){
         console.log("Got command:", action);
@@ -338,9 +383,13 @@ SPDX-License-Identifier: MIT
                     }
                     lastTimelineData = data;
                     menuIcons = data['menu-icons'] || {};
+                    featureFilterState = normalizeFeatureFilterState(data['feature-filters']);
                     let message = document.getElementById('message');
                     message.innerText = data['message'];
                     message.style.display = data['message'] ? 'block' : 'none';
+                    document.body.classList.toggle('lightweight-mode', Boolean(data['lightweight-mode']));
+                    let modeBadge = document.getElementById('mode-badge');
+                    modeBadge.innerText = data['lightweight-mode'] ? `${data['timeline-count']} items - lightweight mode` : '';
 
                     let timeline = document.getElementById('timeline');
                     timeline.innerHTML = '';
@@ -349,7 +398,12 @@ SPDX-License-Identifier: MIT
                                 data['max-parents'],
                                 data['marker-position'],
                                 data['timeline-count']);
+                    applyFeatureFilters();
 
+                    break;
+                case 'setFeatureFilters':
+                    featureFilterState = normalizeFeatureFilterState(data);
+                    applyFeatureFilters();
                     break;
                 case 'debugger':
                     debugger;
@@ -361,6 +415,110 @@ SPDX-License-Identifier: MIT
             return 'FAILED';
         }
         return 'OK';
+    }
+
+    function normalizeFeatureFilterState(data) {
+        data = data || {};
+        let filters = data.filters;
+        if (!Array.isArray(filters)) {
+            filters = [];
+        }
+        return {
+            search: String(data.search || '').toLowerCase().trim(),
+            filters: filters.map(value => String(value).toLowerCase())
+        };
+    }
+
+    function applyFeatureFilters() {
+        let timeline = document.getElementById('timeline');
+        if (!timeline) {
+            return;
+        }
+        let isFiltering = Boolean(featureFilterState.search || featureFilterState.filters.length);
+        document.body.classList.toggle('filtering', isFiltering);
+        for (const list of timeline.children) {
+            if (list.tagName && list.tagName.toLowerCase() == 'ul') {
+                applyFeatureFiltersToList(list);
+            }
+        }
+    }
+
+    function applyFeatureFiltersToList(list) {
+        let anyVisible = false;
+        let children = Array.from(list.children);
+        for (let i = 0; i < children.length; i++) {
+            let item = children[i];
+            if (!item.classList || !item.classList.contains('feature')) {
+                continue;
+            }
+
+            let groupList = null;
+            if (item.getAttribute('data-type') == 'GROUP') {
+                let next = children[i + 1];
+                if (next && next.classList && next.classList.contains('feature-group')) {
+                    groupList = next;
+                }
+            }
+
+            let childVisible = groupList ? applyFeatureFiltersToList(groupList) : false;
+            let selfVisible = featureMatchesFilter(item);
+            let visible = item.getAttribute('data-type') == 'GROUP'
+                ? (selfVisible || childVisible)
+                : selfVisible;
+
+            item.classList.toggle('filtered-out', !visible);
+            if (groupList) {
+                groupList.classList.toggle('filtered-out', !visible);
+            }
+            anyVisible = anyVisible || visible;
+        }
+        return anyVisible;
+    }
+
+    function featureMatchesFilter(item) {
+        let search = featureFilterState.search;
+        let filters = featureFilterState.filters;
+        let name = (item.getAttribute('data-name') || '').toLowerCase();
+        let type = (item.getAttribute('data-type') || '').toLowerCase();
+        let categories = getFeatureCategories(item);
+
+        let matchesSearch = !search || name.includes(search) || type.includes(search);
+        let matchesFilter = filters.length == 0 || filters.some(filter => categories.has(filter));
+        return matchesSearch && matchesFilter;
+    }
+
+    function getFeatureCategories(item) {
+        let categories = new Set();
+        let type = (item.getAttribute('data-type') || '').toLowerCase();
+        let name = (item.getAttribute('data-name') || '').toLowerCase();
+        if (item.getAttribute('data-suppressed') == 'true') {
+            categories.add('suppressed');
+        }
+        if (type == 'group') {
+            categories.add('group');
+        }
+        if (type.includes('sketch')) {
+            categories.add('sketch');
+        }
+        if (type.includes('construction') || type.includes('plane') ||
+            type.includes('axis') || type.includes('point')) {
+            categories.add('construct');
+        }
+        if (type.includes('pattern') || type.includes('mirror')) {
+            categories.add('pattern');
+        }
+        if (type.includes('joint') || type.includes('occurrence') ||
+            type.includes('component') || name.includes('component')) {
+            categories.add('assembly');
+        }
+        if (!categories.has('sketch') &&
+            !categories.has('construct') &&
+            !categories.has('pattern') &&
+            !categories.has('assembly') &&
+            type != 'group') {
+            categories.add('solid');
+        }
+        return categories;
     }
 
     function appendItems(parent, features, maxParents, markerPosition, finalMarkerPosition=null, isGroup=false, markerRenderState=null, blockedMarkerPositions=null) {
@@ -400,8 +558,14 @@ SPDX-License-Identifier: MIT
             listItem.setAttribute('data-name', feature.name);
             listItem.setAttribute('data-suppressed', feature.suppressed ? 'true' : 'false');
             listItem.setAttribute('data-type', feature.type);
+            listItem.setAttribute('data-lightweight', feature.lightweight ? 'true' : 'false');
             if (selectedFeatureIds.has(String(feature['id']))) {
                 listItem.classList.add('selected');
+            }
+            if (feature['health-state'] == 'warning') {
+                listItem.classList.add('health-warning');
+            } else if (feature['health-state'] == 'error') {
+                listItem.classList.add('health-error');
             }
 
             listItem.addEventListener('click', onFeatureClick);
@@ -430,7 +594,17 @@ SPDX-License-Identifier: MIT
                     titlePrefix = `Component: ${parents[0]}\n\n`;
                 }
             }
-            listItem.title = titlePrefix.trim();
+            let titleLines = [];
+            if (titlePrefix.trim()) {
+                titleLines.push(titlePrefix.trim());
+            }
+            if (feature['health-message']) {
+                titleLines.push(feature['health-message']);
+            }
+            if (feature.lightweight && feature.type != 'GROUP') {
+                titleLines.push('Lightweight timeline row');
+            }
+            listItem.title = titleLines.join('\n\n');
 
             let label = document.createElement('span');
             label.classList.add('feature-label');
@@ -449,6 +623,13 @@ SPDX-License-Identifier: MIT
             name.addEventListener('blur', onFeatureNameBlur);
             name.addEventListener('focus', onFeatureNameFocus);
             label.appendChild(name);
+
+            if (feature['health-state'] == 'warning' || feature['health-state'] == 'error') {
+                let healthBadge = document.createElement('span');
+                healthBadge.classList.add('health-badge', feature['health-state']);
+                healthBadge.innerText = feature['health-state'] == 'warning' ? '!' : 'X';
+                label.appendChild(healthBadge);
+            }
 
             // The browser seems to send click to the rightmost span,
             // when clicking outside any span. Add this span to avoid
@@ -611,6 +792,8 @@ SPDX-License-Identifier: MIT
         for (const feature of getFeatureItems()) {
             feature.classList.remove('selected');
         }
+        let ret = query('selectFeatures', { 'ids': [] } );
+        processCommands(ret);
     }
 
     function updateFeatureSelection(item, ctrlKey, shiftKey) {
@@ -680,6 +863,9 @@ SPDX-License-Identifier: MIT
         }
 
         item.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        if (isLightweightItem(item)) {
+            return;
+        }
         let ret = query('selectFeatures', { 'ids': getSelectedFeatureIds() } );
         processCommands(ret);
     }
@@ -699,8 +885,10 @@ SPDX-License-Identifier: MIT
 
         if (!item.classList.contains('selected')) {
             setSelectedFeatureIds([item.getAttribute('data-id')]);
-            let ret = query('selectFeatures', { 'ids': getSelectedFeatureIds() } );
-            processCommands(ret);
+            if (!isLightweightItem(item)) {
+                let ret = query('selectFeatures', { 'ids': getSelectedFeatureIds() } );
+                processCommands(ret);
+            }
         }
         showFeatureContextMenu(e, item);
         e.preventDefault();
@@ -743,42 +931,44 @@ SPDX-License-Identifier: MIT
     function addFeatureContextMenuItems(menu, item) {
         let suppressInfo = getSuppressionMenuInfo();
         let canEditProfileSketch = featureSupportsProfileSketch(item);
-        addContextMenuItem(menu, menuIcon('create-selection-set'), 'Create Selection Set', () => executeFusionFeatureCommand('CreateSelectionGroupCmd'));
+        let lightweight = isLightweightItem(item);
+        addContextMenuItem(menu, menuIcon('create-selection-set'), 'Create Selection Set', () => executeFusionFeatureCommand('CreateSelectionGroupCmd'), '', lightweight);
         addContextMenuSeparator(menu);
-        addContextMenuItem(menu, getContextFeatureIcon(), 'Edit Feature', editContextFeature);
-        addContextMenuItem(menu, menuIcon('edit-profile-sketch'), 'Edit Profile Sketch', () => executeFusionFeatureCommand('ProfileSketchActivate'), '', !canEditProfileSketch);
-        addContextMenuItem(menu, menuIcon('configure'), 'Configure', () => executeFusionFeatureCommand('ConfigureFeatureCmd'));
+        addContextMenuItem(menu, getContextFeatureIcon(), 'Edit Feature', editContextFeature, '', lightweight);
+        addContextMenuItem(menu, menuIcon('edit-profile-sketch'), 'Edit Profile Sketch', () => executeFusionFeatureCommand('ProfileSketchActivate'), '', lightweight || !canEditProfileSketch);
+        addContextMenuItem(menu, menuIcon('configure'), 'Configure', () => executeFusionFeatureCommand('ConfigureFeatureCmd'), '', lightweight);
         addContextMenuSeparator(menu);
-        addContextMenuItem(menu, menuIcon('delete'), 'Delete', () => executeFusionFeatureCommand('FusionDeleteCommand'), 'Del');
-        addContextMenuItem(menu, '', 'Rename', renameContextFeature);
+        addContextMenuItem(menu, menuIcon('delete'), 'Delete', () => executeFusionFeatureCommand('FusionDeleteCommand'), 'Del', lightweight);
+        addContextMenuItem(menu, '', 'Rename', renameContextFeature, '', lightweight);
         addContextMenuSeparator(menu);
         addContextMenuItem(menu, menuIcon('roll-marker'), 'Roll Timeline Marker Here', rollContextFeature);
-        addContextMenuItem(menu, menuIcon('convert-dm'), 'Convert to DM Feature', () => executeFusionFeatureCommand('ConvertToDMFeatureCommand'));
-        addContextMenuItem(menu, '', suppressInfo.label, () => setContextFeaturesSuppressed(suppressInfo.suppressed));
+        addContextMenuItem(menu, menuIcon('convert-dm'), 'Convert to DM Feature', () => executeFusionFeatureCommand('ConvertToDMFeatureCommand'), '', lightweight);
+        addContextMenuItem(menu, '', suppressInfo.label, () => setContextFeaturesSuppressed(suppressInfo.suppressed), '', lightweight);
         addContextMenuSeparator(menu);
-        addContextMenuItem(menu, menuIcon('find-browser'), 'Find in Browser', () => executeFusionFeatureCommand('FindInBrowser'));
-        addContextMenuItem(menu, menuIcon('find-window'), 'Find in Window', () => executeFusionFeatureCommand('FindInWindow'));
+        addContextMenuItem(menu, menuIcon('find-browser'), 'Find in Browser', () => executeFusionFeatureCommand('FindInBrowser'), '', lightweight);
+        addContextMenuItem(menu, menuIcon('find-window'), 'Find in Window', () => executeFusionFeatureCommand('FindInWindow'), '', lightweight);
     }
 
     function addSketchContextMenuItems(menu) {
-        addContextMenuItem(menu, menuIcon('create-selection-set'), 'Create Selection Set', () => executeFusionFeatureCommand('CreateSelectionGroupCmd'));
+        let lightweight = isLightweightItem(contextMenuFeature);
+        addContextMenuItem(menu, menuIcon('create-selection-set'), 'Create Selection Set', () => executeFusionFeatureCommand('CreateSelectionGroupCmd'), '', lightweight);
         addContextMenuSeparator(menu);
-        addContextMenuItem(menu, menuIcon('extrude'), 'Extrude', () => executeFusionFeatureCommand('Extrude'), 'E');
-        addContextMenuItem(menu, menuIcon('offset-plane'), 'Offset Plane', () => executeFusionFeatureCommand('ConstructionPlaneOffsetFromPlaneCommand'));
+        addContextMenuItem(menu, menuIcon('extrude'), 'Extrude', () => executeFusionFeatureCommand('Extrude'), 'E', lightweight);
+        addContextMenuItem(menu, menuIcon('offset-plane'), 'Offset Plane', () => executeFusionFeatureCommand('ConstructionPlaneOffsetFromPlaneCommand'), '', lightweight);
         addContextMenuSeparator(menu);
-        addContextMenuItem(menu, menuIcon('edit-sketch'), 'Edit Sketch', editContextFeature);
-        addContextMenuItem(menu, menuIcon('redefine-sketch-plane'), 'Redefine Sketch Plane', () => executeFusionFeatureCommand('SketchRedefineCommand'));
-        addContextMenuItem(menu, '', 'Select Sketch Plane', () => executeFusionFeatureCommand('SelectSketchPlaneCommand'));
-        addContextMenuItem(menu, menuIcon('slice-sketch'), 'Slice Sketch', () => executeFusionFeatureCommand('SliceSketchCommand'));
-        addContextMenuItem(menu, menuIcon('configure'), 'Configure', () => executeFusionFeatureCommand('ConfigureFeatureCmd'));
+        addContextMenuItem(menu, menuIcon('edit-sketch'), 'Edit Sketch', editContextFeature, '', lightweight);
+        addContextMenuItem(menu, menuIcon('redefine-sketch-plane'), 'Redefine Sketch Plane', () => executeFusionFeatureCommand('SketchRedefineCommand'), '', lightweight);
+        addContextMenuItem(menu, '', 'Select Sketch Plane', () => executeFusionFeatureCommand('SelectSketchPlaneCommand'), '', lightweight);
+        addContextMenuItem(menu, menuIcon('slice-sketch'), 'Slice Sketch', () => executeFusionFeatureCommand('SliceSketchCommand'), '', lightweight);
+        addContextMenuItem(menu, menuIcon('configure'), 'Configure', () => executeFusionFeatureCommand('ConfigureFeatureCmd'), '', lightweight);
         addContextMenuSeparator(menu);
-        addContextMenuItem(menu, menuIcon('export-dxf'), 'Export DXF', () => executeFusionFeatureCommand('SketchExportToDXFCommand'));
-        addContextMenuItem(menu, menuIcon('delete'), 'Delete', () => executeFusionFeatureCommand('FusionDeleteCommand'), 'Del');
-        addContextMenuItem(menu, '', 'Rename', renameContextFeature);
+        addContextMenuItem(menu, menuIcon('export-dxf'), 'Export DXF', () => executeFusionFeatureCommand('SketchExportToDXFCommand'), '', lightweight);
+        addContextMenuItem(menu, menuIcon('delete'), 'Delete', () => executeFusionFeatureCommand('FusionDeleteCommand'), 'Del', lightweight);
+        addContextMenuItem(menu, '', 'Rename', renameContextFeature, '', lightweight);
         addContextMenuSeparator(menu);
-        addContextMenuItem(menu, menuIcon('look-at'), 'Look At', () => executeFusionFeatureCommand('LookAtCommand'));
+        addContextMenuItem(menu, menuIcon('look-at'), 'Look At', () => executeFusionFeatureCommand('LookAtCommand'), '', lightweight);
         addContextMenuSeparator(menu);
-        addContextMenuItem(menu, menuIcon('find-window'), 'Find in Window', () => executeFusionFeatureCommand('FindInWindow'));
+        addContextMenuItem(menu, menuIcon('find-window'), 'Find in Window', () => executeFusionFeatureCommand('FindInWindow'), '', lightweight);
     }
 
     function addMultiFeatureContextMenuItems(menu, selectedCount) {
@@ -786,23 +976,24 @@ SPDX-License-Identifier: MIT
         let selectedItems = getContextFeatureItems();
         let allGroups = selectedItems.length > 0 && selectedItems.every(item => item.getAttribute('data-type') == 'GROUP');
         let anyGroups = selectedItems.some(item => item.getAttribute('data-type') == 'GROUP');
+        let anyLightweight = selectedItems.some(item => isLightweightItem(item));
 
-        addContextMenuItem(menu, menuIcon('create-selection-set'), 'Create Selection Set', () => executeFusionFeatureCommand('CreateSelectionGroupCmd'));
+        addContextMenuItem(menu, menuIcon('create-selection-set'), 'Create Selection Set', () => executeFusionFeatureCommand('CreateSelectionGroupCmd'), '', anyLightweight);
         addContextMenuSeparator(menu);
         addContextMenuItem(menu, menuIcon('configure'), 'Configure', () => executeFusionFeatureCommand('ConfigureFeatureCmd'), '', true);
         addContextMenuSeparator(menu);
         if (allGroups) {
-            addContextMenuItem(menu, menuIcon('ungroup'), 'Ungroup', ungroupSelectedGroups);
+            addContextMenuItem(menu, menuIcon('ungroup'), 'Ungroup', ungroupSelectedGroups, '', anyLightweight);
         } else {
-            addContextMenuItem(menu, menuIcon('create-group'), 'Create Group', groupSelectedFeatures, '', anyGroups);
+            addContextMenuItem(menu, menuIcon('create-group'), 'Create Group', groupSelectedFeatures, '', anyGroups || anyLightweight);
         }
         addContextMenuSeparator(menu);
-        addContextMenuItem(menu, menuIcon('delete'), 'Delete', () => executeFusionFeatureCommand('FusionDeleteCommand'), 'Del');
-        addContextMenuItem(menu, '', 'Rename', renameContextFeature);
+        addContextMenuItem(menu, menuIcon('delete'), 'Delete', () => executeFusionFeatureCommand('FusionDeleteCommand'), 'Del', anyLightweight);
+        addContextMenuItem(menu, '', 'Rename', renameContextFeature, '', anyLightweight);
         addContextMenuSeparator(menu);
         addContextMenuItem(menu, menuIcon('roll-marker'), 'Roll Timeline Marker Here', rollContextFeature);
-        addContextMenuItem(menu, menuIcon('convert-dm'), 'Convert to DM Feature', () => executeFusionFeatureCommand('ConvertToDMFeatureCommand'), '', anyGroups);
-        addContextMenuItem(menu, '', suppressInfo.label, () => setContextFeaturesSuppressed(suppressInfo.suppressed), '', allGroups);
+        addContextMenuItem(menu, menuIcon('convert-dm'), 'Convert to DM Feature', () => executeFusionFeatureCommand('ConvertToDMFeatureCommand'), '', anyGroups || anyLightweight);
+        addContextMenuItem(menu, '', suppressInfo.label, () => setContextFeaturesSuppressed(suppressInfo.suppressed), '', allGroups || anyLightweight);
     }
 
     function addGroupContextMenuItems(menu, item) {
@@ -900,6 +1091,10 @@ SPDX-License-Identifier: MIT
 
     function isSketchItem(item) {
         return item.getAttribute('data-type') == 'Sketch';
+    }
+
+    function isLightweightItem(item) {
+        return item && item.getAttribute('data-lightweight') == 'true';
     }
 
     function featureSupportsProfileSketch(item) {

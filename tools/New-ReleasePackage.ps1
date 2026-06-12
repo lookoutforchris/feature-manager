@@ -35,6 +35,7 @@ $items = @(
     "FeatureManager.py",
     "FeatureManager.manifest",
     "palette.html",
+    "timeline_overlay.ps1",
     "LICENSE",
     "README.md"
 )

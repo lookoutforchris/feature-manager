@@ -61,6 +61,7 @@ Manual Fusion checks:
 - `REQUIREMENTS_NOTES.md`: human review and brainstorming for SolidWorks-style FeatureManager behavior.
 - `CURRENT_STATUS.md`: current behavior, known failures, and tested limitations.
 - `DEVELOPMENT.md`: setup and diagnostic notes.
+- `FUSION_API_HACKS_RESEARCH.md`: public workaround leads and API investigation notes.
 
 ## Review Priorities
 

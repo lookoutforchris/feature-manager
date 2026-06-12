@@ -3,3 +3,6 @@ settings.json
 __pycache__
 release
 dist
+reference
+overlay-actions/
+overlay_state.json

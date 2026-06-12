@@ -57,7 +57,7 @@ The add-in can be temporarily disabled using the *Scripts and Add-ins* dialog. P
 
 ## Release-Candidate TODO
 
-Feature Manager is currently preparing its first public release as `v1.0.0`.
+Feature Manager is currently preparing its first public release as `v1.1.0`.
 Before publishing:
 
 * Run the manual regression checklist against the installed add-in.
@@ -91,12 +91,18 @@ The add-in still works around known Fusion API limitations:
 
 ## Version
 
-Current add-in version: `1.0.0`.
+Current add-in version: `1.1.0`.
 
 This is Feature Manager's first independent version line. It is intentionally
 not based on the upstream add-in's version numbers.
 
 ## Changelog
+
+* v1.1.0
+  * Added the optional **Toggle Horizontal Timeline** bottom overlay for Windows.
+  * Added bottom-bar timeline controls, feature filters, search, and status text.
+  * Added lightweight loading for large timelines and improved document-transition guards.
+  * Updated the project screenshot.
 
 * v1.0.0
   * Rebranded the visible add-in and palette as Feature Manager.
